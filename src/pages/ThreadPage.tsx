@@ -13,33 +13,39 @@ import { Textarea } from '@/components/ui/textarea';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+
 export function ThreadPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [replyBody, setReplyBody] = React.useState('');
   const [isReplying, setIsReplying] = React.useState(false);
+
   const { data: email, isLoading } = useQuery<Email>({
     queryKey: ['email', id],
     queryFn: () => api<Email>(`/api/emails/${id}`),
     enabled: !!id,
   });
+
   const markAsReadMutation = useMutation({
-    mutationFn: (emailId: string) => 
+    mutationFn: (emailId: string) =>
       api(`/api/emails/${emailId}`, { method: 'PATCH', body: JSON.stringify({ isRead: true }) }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['emails'] });
     },
   });
+
   // Extract variables for useEffect to avoid unnecessary re-runs
   const emailId = email?.id;
   const isRead = email?.isRead;
   const isPending = markAsReadMutation.isPending;
+
   useEffect(() => {
     if (emailId && isRead === false && !isPending) {
       markAsReadMutation.mutate(emailId);
     }
-  }, [emailId, isRead, isPending, markAsReadMutation.mutate]);
+  }, [emailId, isRead, isPending, markAsReadMutation.mutate, markAsReadMutation]);
+
   const handleBack = useCallback(() => {
     if (window.history.length > 1) {
       navigate(-1);
@@ -47,21 +53,21 @@ export function ThreadPage() {
       navigate('/', { replace: true });
     }
   }, [navigate]);
+
   const sendReply = useMutation({
-    mutationFn: () => api('/api/emails/send', {
-      method: 'POST',
-      body: JSON.stringify({ 
-        to: email?.from.email, 
-        subject: `Re: ${email?.subject}`, 
-        body: replyBody 
-      })
-    }),
+    mutationFn: ({ to, subject, body }: { to: string; subject: string; body: string }) =>
+      api('/api/emails/send', {
+        method: 'POST',
+        body: JSON.stringify({ to, subject, body })
+      }),
     onSuccess: () => {
       toast.success("Reply sent");
       setReplyBody('');
       setIsReplying(false);
+      queryClient.invalidateQueries({ queryKey: ['emails'] });
     },
   });
+
   if (isLoading) {
     return (
       <AppLayout>
@@ -71,6 +77,7 @@ export function ThreadPage() {
       </AppLayout>
     );
   }
+
   if (!email) {
     return (
       <AppLayout>
@@ -78,6 +85,7 @@ export function ThreadPage() {
       </AppLayout>
     );
   }
+
   return (
     <AppLayout>
       <div className="max-w-4xl mx-auto px-4 py-4 md:py-8 flex flex-col h-full overflow-hidden">
@@ -100,6 +108,7 @@ export function ThreadPage() {
             </Button>
           </div>
         </header>
+
         <div className="flex-1 overflow-y-auto space-y-8 pr-1 custom-scrollbar scroll-smooth">
           <motion.h1
             layoutId={`subject-${email.id}`}
@@ -143,6 +152,7 @@ export function ThreadPage() {
             </motion.div>
           </div>
         </div>
+
         <div className="mt-6 pt-4 border-t border-surface-variant/20 bg-background/50 backdrop-blur-sm">
           <AnimatePresence mode="wait">
             {isReplying ? (
@@ -173,7 +183,11 @@ export function ThreadPage() {
                     </Button>
                   </div>
                   <Button
-                    onClick={() => sendReply.mutate()}
+                    onClick={() => sendReply.mutate({
+                      to: email.from.email,
+                      subject: `Re: ${email.subject}`,
+                      body: replyBody
+                    })}
                     disabled={!replyBody.trim() || sendReply.isPending}
                     className="rounded-full gap-2 px-8 h-10 bg-primary text-white shadow-md active:scale-95 transition-transform"
                   >
@@ -206,3 +220,4 @@ export function ThreadPage() {
     </AppLayout>
   );
 }
+//
