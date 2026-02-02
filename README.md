@@ -1,6 +1,6 @@
 # Cloudflare Workers Full-Stack Template
 
-[cloudflarebutton]
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/VuDube/aeromail-native-android-pwa-email-client)
 
 A production-ready starter template for building full-stack applications with Cloudflare Workers. Features a serverless backend powered by Durable Objects for multi-tenant entity storage, a modern React frontend with TanStack Query, Shadcn/UI components, TailwindCSS, and TypeScript end-to-end.
 
@@ -83,7 +83,7 @@ bun run deploy
 
 This builds the frontend assets, bundles the Worker, and deploys via Wrangler.
 
-[cloudflarebutton]
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/VuDube/aeromail-native-android-pwa-email-client)
 
 ### Custom Domain & Assets
 
