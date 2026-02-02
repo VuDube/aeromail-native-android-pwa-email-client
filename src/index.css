@@ -33,6 +33,7 @@
     --input: 264 15% 85%;
     --ring: 264 50% 48%;
     --radius: 1rem;
+    --spacing-unit: 1rem;
   }
   .dark {
     --background: 264 15% 10%;
@@ -58,6 +59,11 @@
     --muted-foreground: 264 10% 70%;
     --border: 264 10% 25%;
   }
+  /* Density Overrides */
+  .density-compact {
+    --radius: 0.5rem;
+    --spacing-unit: 0.5rem;
+  }
 }
 @layer base {
   * {
@@ -68,13 +74,19 @@
   }
 }
 .m3-card {
-  @apply bg-surface-1 rounded-m3-lg p-4 transition-colors hover:bg-surface-2;
+  @apply bg-surface-1 rounded-m3-lg p-[var(--spacing-unit)] transition-colors hover:bg-surface-2;
 }
 .m3-fab {
-  @apply fixed bottom-6 right-6 h-14 w-14 rounded-m3-lg bg-primary-container text-primary-on-container shadow-lg flex items-center justify-center transition-transform active:scale-90 hover:scale-105;
+  @apply fixed bottom-6 right-6 h-14 w-14 rounded-m3-lg bg-primary-container text-on-primary-container shadow-lg flex items-center justify-center transition-transform active:scale-90 hover:scale-105 z-30;
+}
+.density-compact .m3-fab {
+  @apply h-12 w-12 bottom-4 right-4;
 }
 .prose-email {
-  @apply text-surface-on leading-relaxed max-w-none;
+  @apply text-on-surface leading-relaxed max-w-none;
+}
+.density-compact .prose-email {
+  @apply text-sm leading-normal;
 }
 .prose-email p {
   @apply mb-4;
@@ -83,5 +95,12 @@
   @apply text-primary underline;
 }
 .prose-email blockquote {
-  @apply border-l-4 border-surface-variant pl-4 italic text-surface-on-variant;
+  @apply border-l-4 border-surface-variant pl-4 italic text-on-surface-variant;
+}
+@keyframes swipe-reveal {
+  from { opacity: 0; transform: scale(0.8); }
+  to { opacity: 1; transform: scale(1); }
+}
+.swipe-action-icon {
+  animation: swipe-reveal 0.2s ease-out;
 }
