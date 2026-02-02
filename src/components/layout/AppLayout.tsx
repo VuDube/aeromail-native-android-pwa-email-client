@@ -12,14 +12,15 @@ const NAV_ITEMS = [
 ];
 export function AppLayout({ children }: { children: React.ReactNode }) {
   const isMobile = useIsMobile();
-  const { pathname } = useLocation();
+  const location = useLocation();
   const navigate = useNavigate();
+  const pathname = location?.pathname || "/";
   const isActive = (item: typeof NAV_ITEMS[0]) => item.match(pathname);
   const isSettingsActive = pathname === "/settings";
   // Back button logic for mobile
   const showBack = isMobile && (
-    pathname.startsWith('/thread/') || 
-    pathname === '/compose' || 
+    pathname.startsWith('/thread/') ||
+    pathname === '/compose' ||
     pathname === '/settings'
   );
   const getPageTitle = () => {
@@ -56,12 +57,12 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
             ))}
           </nav>
           <div className="px-3 mt-auto">
-            <Link 
-              to="/settings" 
+            <Link
+              to="/settings"
               className={cn(
                 "flex items-center gap-4 px-4 py-3 rounded-m3-lg transition-all",
-                isSettingsActive 
-                  ? "bg-secondary-container text-on-secondary-container" 
+                isSettingsActive
+                  ? "bg-secondary-container text-on-secondary-container"
                   : "text-on-surface-variant hover:bg-surface-2"
               )}
             >
@@ -86,7 +87,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           </header>
         )}
         {/* Content Area */}
-        <div className="flex-1 overflow-y-auto overflow-x-hidden scroll-smooth">
+        <div className="flex-1 overflow-y-auto overflow-x-hidden scroll-smooth bg-surface">
           {children}
         </div>
         {/* Mobile Bottom Navigation */}

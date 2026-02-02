@@ -5,7 +5,7 @@ import { api } from '@/lib/api-client';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Email } from '@shared/types';
 import { format } from 'date-fns';
-import { Plus, Search, Star, Loader2, RefreshCw, X, WifiOff, Download } from 'lucide-react';
+import { Plus, Search, Star, Loader2, RefreshCw, X, WifiOff, Download, AlertCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -33,9 +33,10 @@ export function HomePage() {
       window.removeEventListener('beforeinstallprompt', handleBeforeInstall);
     };
   }, []);
-  const { data: emails, isLoading, isFetching } = useQuery<Email[]>({
+  const { data: emails, isLoading, isFetching, error } = useQuery<Email[]>({
     queryKey: ['emails', folder],
     queryFn: () => api<Email[]>(`/api/emails?folder=${folder}`),
+    retry: 2,
   });
   const filteredEmails = useMemo(() => {
     if (!emails) return [];
@@ -66,11 +67,17 @@ export function HomePage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['emails'] })
   });
   useEffect(() => {
-    api('/api/init').catch(console.error);
+    api('/api/init').catch((err) => {
+      console.error('[INIT FAILED]', err);
+    });
   }, []);
   const handleRefresh = async () => {
-    await queryClient.invalidateQueries({ queryKey: ['emails', folder] });
-    toast.info('Inbox updated');
+    try {
+      await queryClient.invalidateQueries({ queryKey: ['emails', folder] });
+      toast.info('Inbox updated');
+    } catch (e) {
+      toast.error('Refresh failed');
+    }
   };
   const handleInstall = async () => {
     if (!deferredPrompt) return;
@@ -143,6 +150,21 @@ export function HomePage() {
                 <Loader2 className="h-8 w-8 animate-spin text-primary" />
                 <p className="text-sm font-medium">Syncing your inbox...</p>
               </div>
+            ) : error ? (
+              <div className="flex flex-col items-center justify-center py-20 gap-4 text-center">
+                <div className="p-4 rounded-full bg-destructive/10">
+                  <AlertCircle className="h-10 w-10 text-destructive" />
+                </div>
+                <div className="space-y-1">
+                  <p className="font-bold text-on-surface">Connection Error</p>
+                  <p className="text-sm text-on-surface-variant max-w-xs mx-auto">
+                    {error instanceof Error ? error.message : "We couldn't reach the server. Please try again."}
+                  </p>
+                </div>
+                <Button onClick={handleRefresh} variant="outline" className="rounded-full">
+                  Retry Connection
+                </Button>
+              </div>
             ) : (
               <AnimatePresence mode="popLayout">
                 {filteredEmails.map((email, idx) => (
@@ -152,7 +174,7 @@ export function HomePage() {
                     initial={{ opacity: 0, scale: 0.95 }}
                     animate={{ opacity: 1, scale: 1 }}
                     exit={{ opacity: 0, scale: 0.95 }}
-                    transition={{ duration: 0.2, delay: idx * 0.01 }}
+                    transition={{ duration: 0.2, delay: Math.min(idx * 0.01, 0.2) }}
                     className={cn(
                       "group relative flex items-start gap-4 p-4 rounded-m3-lg cursor-pointer transition-all border border-transparent mb-1",
                       email.isRead ? 'bg-transparent hover:bg-surface-1' : 'bg-surface-2 hover:bg-surface-3'
@@ -196,10 +218,10 @@ export function HomePage() {
                 ))}
               </AnimatePresence>
             )}
-            {!isLoading && filteredEmails.length === 0 && (
+            {!isLoading && !error && filteredEmails.length === 0 && (
               <div className="text-center py-20 space-y-4">
                 <div className="text-6xl grayscale opacity-50">
-                  {searchQuery ? '🔍' : '📭'}
+                  {searchQuery ? '��' : '📭'}
                 </div>
                 <div className="space-y-1">
                   <p className="text-on-surface font-medium text-lg">
