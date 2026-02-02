@@ -83,7 +83,7 @@
     "cloudflare": "^5.0.0"
   },
   "devDependencies": {
-    "@cloudflare/vite-plugin": "1.17.1",
+    "@cloudflare/vite-plugin": "^1.17.1",
     "@cloudflare/workers-types": "^4.20250424.0",
     "@eslint/js": "^9.22.0",
     "@types/node": "^22.15.3",
