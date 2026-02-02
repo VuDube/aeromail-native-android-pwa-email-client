@@ -5,13 +5,26 @@ import { useDensity } from '@/hooks/use-density';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api-client';
 import { User } from '@shared/types';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Button } from '@/components/ui/button';
-import { Link } from 'react-router-dom';import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Link } from 'react-router-dom';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
-import { Moon, Sun, Trash2, RefreshCcw, User as UserIcon, Layout, Monitor, ShieldCheck, HelpCircle, BookOpen, ChevronRight } from 'lucide-react';
+import { 
+  Moon, 
+  Sun, 
+  Trash2, 
+  RefreshCcw, 
+  User as UserIcon, 
+  Layout, 
+  Monitor, 
+  ShieldCheck, 
+  HelpCircle, 
+  BookOpen, 
+  ChevronRight 
+} from 'lucide-react';
 import { toast } from 'sonner';
 export function SettingsPage() {
   const { isDark, toggleTheme } = useTheme();
@@ -35,6 +48,11 @@ export function SettingsPage() {
       });
       toast.success('Application cache cleared');
       setTimeout(() => window.location.reload(), 1000);
+    }
+  };
+  const handleFactoryReset = () => {
+    if (window.confirm('Are you absolutely sure you want to delete everything? This action cannot be undone.')) {
+      resetData.mutate();
     }
   };
   return (
@@ -90,7 +108,12 @@ export function SettingsPage() {
                     <Label className="text-base font-semibold">Density</Label>
                     <p className="text-xs text-on-surface-variant">Control how much content is visible</p>
                   </div>
-                  <ToggleGroup type="single" value={density} onValueChange={(val) => val && setDensity(val as any)} className="bg-surface-2 p-1 rounded-full">
+                  <ToggleGroup 
+                    type="single" 
+                    value={density} 
+                    onValueChange={(val) => val && setDensity(val as any)} 
+                    className="bg-surface-2 p-1 rounded-full"
+                  >
                     <ToggleGroupItem value="comfortable" className="rounded-full px-4 text-xs font-medium data-[state=on]:bg-primary data-[state=on]:text-white">Comfortable</ToggleGroupItem>
                     <ToggleGroupItem value="compact" className="rounded-full px-4 text-xs font-medium data-[state=on]:bg-primary data-[state=on]:text-white">Compact</ToggleGroupItem>
                   </ToggleGroup>
@@ -98,7 +121,6 @@ export function SettingsPage() {
               </CardContent>
             </Card>
           </section>
-
           {/* Help & Documentation */}
           <section className="space-y-4">
             <div className="flex items-center gap-2 text-primary font-medium">
@@ -108,15 +130,19 @@ export function SettingsPage() {
               <Card className="rounded-m3-lg border-none bg-primary/5 hover:bg-primary/10 transition-colors shadow-sm cursor-pointer group">
                 <CardContent className="flex items-center justify-between p-6">
                   <div className="flex items-center gap-4">
-                    <div className="h-10 w-10 rounded-full bg-primary/20 flex items-center justify-center text-primary"><BookOpen className="h-5 w-5" /></div>
-                    <div><p className="font-bold text-primary">Developer & PWA Guide</p><p className="text-xs text-on-surface-variant">Setup instructions, deployment, and PWA tips</p></div>
+                    <div className="h-10 w-10 rounded-full bg-primary/20 flex items-center justify-center text-primary">
+                      <BookOpen className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <p className="font-bold text-primary">Developer & PWA Guide</p>
+                      <p className="text-xs text-on-surface-variant">Setup instructions, deployment, and PWA tips</p>
+                    </div>
                   </div>
                   <ChevronRight className="h-5 w-5 text-primary group-hover:translate-x-1 transition-transform" />
                 </CardContent>
               </Card>
             </Link>
           </section>
-
           {/* System */}
           <section className="space-y-4 pt-4 border-t border-surface-variant">
             <div className="flex items-center gap-2 text-destructive font-medium">
@@ -135,14 +161,15 @@ export function SettingsPage() {
                   <p className="text-sm font-semibold text-destructive">Factory Reset</p>
                   <p className="text-xs text-on-surface-variant">Destroys all local data and mocks</p>
                 </div>
-                <Button 
-                  variant="destructive" 
-                  size="sm" 
-                  onClick={() => confirm('Delete everything?') && resetData.mutate()} 
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={handleFactoryReset}
                   className="rounded-full"
                   disabled={resetData.isPending}
                 >
-                  {resetData.isPending ? <RefreshCcw className="h-4 w-4 animate-spin" /> : 'Reset System'}
+                  {resetData.isPending ? <RefreshCcw className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4 mr-2" />}
+                  {resetData.isPending ? 'Resetting...' : 'Reset System'}
                 </Button>
               </div>
             </div>

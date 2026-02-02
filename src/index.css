@@ -83,7 +83,7 @@
   @apply h-12 w-12 bottom-4 right-4;
 }
 .prose-email {
-  @apply text-surface-on leading-relaxed max-w-none;
+  @apply text-surface-on leading-relaxed max-w-none whitespace-pre-wrap;
 }
 .density-compact .prose-email {
   @apply text-sm leading-normal;
@@ -96,6 +96,20 @@
 }
 .prose-email blockquote {
   @apply border-l-4 border-surface-variant pl-4 italic text-surface-on-variant;
+}
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: hsl(var(--surface-variant)) transparent;
+}
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background-color: hsl(var(--surface-variant));
+  border-radius: 20px;
 }
 @keyframes swipe-reveal {
   from { opacity: 0; transform: scale(0.8); }
