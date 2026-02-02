@@ -14,6 +14,13 @@ export interface UserPreferences {
   theme: 'light' | 'dark' | 'system';
   density: 'comfortable' | 'compact';
 }
+export interface EmailAttachment {
+  id: string;
+  filename: string;
+  contentType: string;
+  size: number;
+  url: string;
+}
 export interface Email {
   id: string;
   threadId: string;
@@ -27,13 +34,8 @@ export interface Email {
   isStarred: boolean;
   folder: FolderType;
   attachments?: EmailAttachment[];
-}
-export interface EmailAttachment {
-  id: string;
-  filename: string;
-  contentType: string;
-  size: number;
-  url: string;
+  // Composite key for indexing: folder:timestamp:id
+  indexKey?: string;
 }
 export interface EmailThread {
   id: string;
@@ -43,4 +45,6 @@ export interface EmailThread {
   messages: Email[];
   participantNames: string[];
   unreadCount: number;
+  isStarred: boolean; // Computed: true if any message in thread is starred
+  folder: FolderType;
 }
