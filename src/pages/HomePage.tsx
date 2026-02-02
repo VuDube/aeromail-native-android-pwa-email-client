@@ -5,38 +5,107 @@ import { api } from '@/lib/api-client';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Email } from '@shared/types';
 import { format } from 'date-fns';
-import { Plus, Search, Star, Loader2, RefreshCw, X, WifiOff, Download, AlertCircle } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { Plus, Search, Star, Loader2, RefreshCw, X, WifiOff, Download, AlertCircle, Archive, MailOpen, Inbox as InboxIcon } from 'lucide-react';
+import { motion, AnimatePresence, useMotionValue, useTransform } from 'framer-motion';
+import { useSwipeable } from 'react-swipeable';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { useDensity } from '@/hooks/use-density';
+interface SwipeableEmailCardProps {
+  email: Email;
+  idx: number;
+  density: string;
+  onArchive: (id: string) => void;
+  onToggleRead: (id: string, current: boolean) => void;
+  onToggleStar: (id: string, current: boolean) => void;
+}
+function SwipeableEmailCard({ email, idx, density, onArchive, onToggleRead, onToggleStar }: SwipeableEmailCardProps) {
+  const x = useMotionValue(0);
+  const opacity = useTransform(x, [-100, 0, 100], [1, 1, 1]);
+  const bgColorLeft = useTransform(x, [0, 100], ['rgba(255,255,255,0)', 'rgba(34, 197, 94, 0.2)']);
+  const bgColorRight = useTransform(x, [-100, 0], ['rgba(59, 130, 246, 0.2)', 'rgba(255,255,255,0)']);
+  const handlers = useSwipeable({
+    onSwipedLeft: () => {
+      if (x.get() < -50) onArchive(email.id);
+      x.set(0);
+    },
+    onSwipedRight: () => {
+      if (x.get() > 50) onToggleRead(email.id, email.isRead);
+      x.set(0);
+    },
+    onSwiping: (e) => {
+      x.set(e.deltaX);
+    },
+    trackMouse: true,
+  });
+  return (
+    <div className="relative overflow-hidden mb-1 rounded-m3-lg">
+      <motion.div style={{ backgroundColor: bgColorLeft }} className="absolute inset-y-0 left-0 w-full flex items-center px-6 pointer-events-none">
+        <MailOpen className="h-6 w-6 text-green-600 swipe-action-icon" />
+      </motion.div>
+      <motion.div style={{ backgroundColor: bgColorRight }} className="absolute inset-y-0 right-0 w-full flex items-center justify-end px-6 pointer-events-none">
+        <Archive className="h-6 w-6 text-blue-600 swipe-action-icon" />
+      </motion.div>
+      <motion.div
+        {...handlers}
+        style={{ x, opacity }}
+        layout
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: Math.min(idx * 0.03, 0.3) }}
+        className={cn(
+          "group relative flex items-start gap-3 cursor-pointer transition-all border border-transparent",
+          density === 'compact' ? "p-2" : "p-4",
+          email.isRead ? 'bg-transparent hover:bg-surface-1' : 'bg-surface-2 hover:bg-surface-3'
+        )}
+      >
+        <button
+          onClick={(e) => {
+            e.preventDefault(); e.stopPropagation();
+            onToggleStar(email.id, email.isStarred);
+          }}
+          className="shrink-0 pt-1 z-10"
+        >
+          <Star className={cn(
+            "h-5 w-5 transition-colors",
+            email.isStarred ? 'fill-tertiary text-tertiary' : 'text-on-surface-variant opacity-30 hover:opacity-100'
+          )} />
+        </button>
+        <Link to={`/thread/${email.id}`} className="flex-1 min-w-0 flex items-start gap-3">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center justify-between gap-2 mb-0.5">
+              <div className="flex items-center gap-2">
+                {!email.isRead && <div className="h-2 w-2 rounded-full bg-primary" />}
+                <span className={cn("truncate", density === 'compact' ? "text-xs" : "text-sm", !email.isRead ? 'font-bold text-on-surface' : 'font-medium text-on-surface-variant')}>
+                  {email.from.name}
+                </span>
+              </div>
+              <span className="text-[10px] text-on-surface-variant shrink-0 font-medium">
+                {format(email.timestamp, 'MMM d')}
+              </span>
+            </div>
+            <h3 className={cn("truncate mb-0.5", density === 'compact' ? "text-xs" : "text-sm", !email.isRead ? 'font-semibold text-on-surface' : 'text-on-surface-variant')}>
+              {email.subject}
+            </h3>
+            <p className="text-xs text-on-surface-variant line-clamp-1 opacity-70">
+              {email.snippet}
+            </p>
+          </div>
+        </Link>
+      </motion.div>
+    </div>
+  );
+}
 export function HomePage() {
   const queryClient = useQueryClient();
   const { folder = 'inbox' } = useParams<{ folder: string }>();
   const [searchQuery, setSearchQuery] = useState('');
-  const [isOffline, setIsOffline] = useState(!navigator.onLine);
-  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
-  useEffect(() => {
-    const handleOnline = () => setIsOffline(false);
-    const handleOffline = () => setIsOffline(true);
-    const handleBeforeInstall = (e: any) => {
-      e.preventDefault();
-      setDeferredPrompt(e);
-    };
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
-    window.addEventListener('beforeinstallprompt', handleBeforeInstall);
-    return () => {
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
-      window.removeEventListener('beforeinstallprompt', handleBeforeInstall);
-    };
-  }, []);
+  const { density } = useDensity();
   const { data: emails, isLoading, isFetching, error } = useQuery<Email[]>({
     queryKey: ['emails', folder],
     queryFn: () => api<Email[]>(`/api/emails?folder=${folder}`),
-    retry: 2,
   });
   const filteredEmails = useMemo(() => {
     if (!emails) return [];
@@ -48,47 +117,33 @@ export function HomePage() {
       e.snippet.toLowerCase().includes(q)
     );
   }, [emails, searchQuery]);
-  const simulateInbound = useMutation({
-    mutationFn: () => api('/api/simulation/inbound', {
-      method: 'POST',
-      body: JSON.stringify({ subject: `New Message ${Date.now()}` })
-    }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['emails'] });
-      toast.success('New email received!');
-    }
-  });
-  const toggleStar = useMutation({
-    mutationFn: ({ id, isStarred }: { id: string, isStarred: boolean }) =>
-      api(`/api/emails/${id}`, {
-        method: 'PATCH',
-        body: JSON.stringify({ isStarred: !isStarred })
-      }),
+  const toggleMutation = useMutation({
+    mutationFn: ({ id, updates }: { id: string, updates: Partial<Email> }) =>
+      api(`/api/emails/${id}`, { method: 'PATCH', body: JSON.stringify(updates) }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['emails'] })
   });
-  useEffect(() => {
-    api('/api/init').catch((err) => {
-      console.error('[INIT FAILED]', err);
-    });
-  }, []);
-  const handleRefresh = async () => {
-    try {
-      await queryClient.invalidateQueries({ queryKey: ['emails', folder] });
-      toast.info('Inbox updated');
-    } catch (e) {
-      toast.error('Refresh failed');
+  const handleArchive = (id: string) => {
+    toggleMutation.mutate({ id, updates: { folder: 'trash' } });
+    toast.info("Moved to trash");
+  };
+  const handleToggleRead = (id: string, current: boolean) => {
+    toggleMutation.mutate({ id, updates: { isRead: !current } });
+    toast.info(!current ? "Marked as read" : "Marked as unread");
+  };
+  const handleToggleStar = (id: string, current: boolean) => {
+    toggleMutation.mutate({ id, updates: { isStarred: !current } });
+  };
+  const simulateInbound = useMutation({
+    mutationFn: () => api('/api/simulation/inbound', { method: 'POST', body: JSON.stringify({ subject: `Simulated: ${new Date().toLocaleTimeString()}` }) }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['emails'] });
+      toast.success('New simulated email arrived!');
     }
-  };
-  const handleInstall = async () => {
-    if (!deferredPrompt) return;
-    deferredPrompt.prompt();
-    const { outcome } = await deferredPrompt.userChoice;
-    if (outcome === 'accepted') setDeferredPrompt(null);
-  };
+  });
   return (
     <AppLayout>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="py-8 md:py-10 lg:py-12 space-y-6">
+        <div className={cn("py-4 md:py-8 lg:py-10 space-y-6")}>
           <header className="flex flex-col gap-4">
             <div className="relative group">
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-on-surface-variant opacity-50 group-focus-within:opacity-100 transition-opacity" />
@@ -98,163 +153,60 @@ export function HomePage() {
                 placeholder="Search in mail"
                 className="w-full h-12 pl-12 pr-12 rounded-m3-xl bg-surface-2 border-none focus-visible:ring-primary transition-all shadow-sm"
               />
-              {searchQuery && (
-                <button
-                  onClick={() => setSearchQuery('')}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 p-1 rounded-full hover:bg-surface-3 transition-colors"
-                >
-                  <X className="h-4 w-4 text-on-surface-variant" />
-                </button>
-              )}
             </div>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <h1 className="text-2xl font-medium text-on-surface capitalize">
-                  {searchQuery ? 'Search Results' : folder}
+                <h1 className="text-xl font-medium text-on-surface capitalize">
+                  {searchQuery ? 'Results' : folder}
                 </h1>
-                {isOffline && (
-                  <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-destructive/10 text-destructive text-[10px] font-bold uppercase tracking-wider">
-                    <WifiOff className="h-3 w-3" />
-                    Offline
-                  </div>
-                )}
-                <button
-                  onClick={handleRefresh}
-                  className={cn("p-2 rounded-full hover:bg-surface-2 transition-colors", isFetching && "animate-spin")}
-                >
-                  <RefreshCw className="h-4 w-4 text-on-surface-variant" />
+                <button onClick={() => queryClient.invalidateQueries({ queryKey: ['emails'] })} className={cn("p-2 rounded-full", isFetching && "animate-spin")}>
+                  <RefreshCw className="h-4 w-4" />
                 </button>
               </div>
-              {!searchQuery && !isOffline && (
-                <div className="flex items-center gap-2">
-                  {deferredPrompt && (
-                    <Button variant="outline" size="sm" onClick={handleInstall} className="rounded-full h-8 text-xs gap-1.5 border-primary/20 text-primary">
-                      <Download className="h-3.5 w-3.5" />
-                      Install
-                    </Button>
-                  )}
-                  <button
-                    onClick={() => simulateInbound.mutate()}
-                    className="text-xs font-medium text-primary hover:underline bg-primary/5 px-3 py-1.5 rounded-full"
-                    disabled={simulateInbound.isPending}
-                  >
-                    Simulate Inbound
-                  </button>
-                </div>
-              )}
+              <Button variant="ghost" size="sm" onClick={() => simulateInbound.mutate()} className="text-xs text-primary rounded-full">
+                Simulate
+              </Button>
             </div>
           </header>
-          <section className="space-y-1">
+          <section className="space-y-px">
             {isLoading ? (
-              <div className="flex flex-col items-center justify-center py-20 gap-3 text-muted-foreground">
+              <div className="flex flex-col items-center justify-center py-20 gap-3">
                 <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                <p className="text-sm font-medium">Syncing your inbox...</p>
+                <p className="text-sm font-medium text-muted-foreground">Syncing...</p>
               </div>
-            ) : error ? (
-              <div className="flex flex-col items-center justify-center py-20 gap-4 text-center">
-                <div className="p-4 rounded-full bg-destructive/10">
-                  <AlertCircle className="h-10 w-10 text-destructive" />
-                </div>
-                <div className="space-y-1">
-                  <p className="font-bold text-on-surface">Connection Error</p>
-                  <p className="text-sm text-on-surface-variant max-w-xs mx-auto">
-                    {error instanceof Error ? error.message : "We couldn't reach the server. Please try again."}
-                  </p>
-                </div>
-                <Button onClick={handleRefresh} variant="outline" className="rounded-full">
-                  Retry Connection
-                </Button>
-              </div>
-            ) : (
+            ) : filteredEmails.length > 0 ? (
               <AnimatePresence mode="popLayout">
                 {filteredEmails.map((email, idx) => (
-                  <motion.div
+                  <SwipeableEmailCard
                     key={email.id}
-                    layout
-                    initial={{ opacity: 0, scale: 0.95 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0, scale: 0.95 }}
-                    transition={{ duration: 0.2, delay: Math.min(idx * 0.01, 0.2) }}
-                    className={cn(
-                      "group relative flex items-start gap-4 p-4 rounded-m3-lg cursor-pointer transition-all border border-transparent mb-1",
-                      email.isRead ? 'bg-transparent hover:bg-surface-1' : 'bg-surface-2 hover:bg-surface-3'
-                    )}
-                  >
-                    <button
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        toggleStar.mutate({ id: email.id, isStarred: email.isStarred });
-                      }}
-                      className="shrink-0 pt-1 z-10"
-                    >
-                      <Star className={cn(
-                        "h-5 w-5 transition-colors",
-                        email.isStarred ? 'fill-tertiary text-tertiary' : 'text-on-surface-variant opacity-30 hover:opacity-100'
-                      )} />
-                    </button>
-                    <Link to={`/thread/${email.id}`} className="flex-1 min-w-0 flex items-start gap-4">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between gap-2 mb-0.5">
-                          <div className="flex items-center gap-2">
-                            {!email.isRead && <div className="h-2 w-2 rounded-full bg-primary" />}
-                            <span className={cn("text-sm truncate", !email.isRead ? 'font-bold text-on-surface' : 'font-medium text-on-surface-variant')}>
-                              {email.from.name}
-                            </span>
-                          </div>
-                          <span className="text-[10px] text-on-surface-variant shrink-0 font-medium">
-                            {format(email.timestamp, 'MMM d, h:mm a')}
-                          </span>
-                        </div>
-                        <h3 className={cn("text-sm truncate mb-0.5", !email.isRead ? 'font-semibold text-on-surface' : 'text-on-surface-variant')}>
-                          {email.subject}
-                        </h3>
-                        <p className="text-xs text-on-surface-variant line-clamp-1 opacity-70">
-                          {email.snippet}
-                        </p>
-                      </div>
-                    </Link>
-                  </motion.div>
+                    email={email}
+                    idx={idx}
+                    density={density}
+                    onArchive={handleArchive}
+                    onToggleRead={handleToggleRead}
+                    onToggleStar={handleToggleStar}
+                  />
                 ))}
               </AnimatePresence>
-            )}
-            {!isLoading && !error && filteredEmails.length === 0 && (
-              <div className="text-center py-20 space-y-4">
-                <div className="text-6xl grayscale opacity-50">
-                  {searchQuery ? '��' : '📭'}
+            ) : (
+              <div className="flex flex-col items-center justify-center py-20 text-center gap-4">
+                <div className="p-6 bg-surface-1 rounded-full">
+                  <InboxIcon className="h-12 w-12 text-on-surface-variant opacity-20" />
                 </div>
-                <div className="space-y-1">
-                  <p className="text-on-surface font-medium text-lg">
-                    {searchQuery ? `No results for "${searchQuery}"` : `Your ${folder} is empty`}
-                  </p>
-                  <p className="text-on-surface-variant text-sm">
-                    {searchQuery ? 'Try searching for different keywords.' : 'Messages in this folder will appear here.'}
-                  </p>
+                <div>
+                  <h3 className="text-lg font-medium">Nothing here</h3>
+                  <p className="text-sm text-on-surface-variant">Your {folder} is clear for now.</p>
                 </div>
               </div>
             )}
           </section>
         </div>
       </div>
-      <AnimatePresence>
-        {(!searchQuery || window.innerWidth > 768) && (
-          <motion.div
-            initial={{ scale: 0, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            exit={{ scale: 0, opacity: 0 }}
-          >
-            <Link to="/compose">
-              <button
-                className="m3-fab lg:h-16 lg:w-44 lg:rounded-2xl lg:gap-3 z-30"
-                aria-label="Compose email"
-              >
-                <Plus className="h-6 w-6" />
-                <span className="hidden lg:block font-medium text-sm">Compose</span>
-              </button>
-            </Link>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      <Link to="/compose">
+        <button className="m3-fab" aria-label="Compose">
+          <Plus className="h-6 w-6" />
+        </button>
+      </Link>
     </AppLayout>
   );
 }
