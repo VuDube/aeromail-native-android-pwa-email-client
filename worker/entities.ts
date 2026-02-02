@@ -21,6 +21,26 @@ export class ThreadEntity extends IndexedEntity<EmailThread> {
     isStarred: false,
     folder: "inbox"
   };
+  /**
+   * Synchronizes thread metadata based on its constituent messages.
+   * Useful when an individual message is updated (e.g., marked as read).
+   */
+  async refreshMetadata(env: any): Promise<EmailThread> {
+    return this.mutate(s => {
+      const messages = s.messages || [];
+      if (messages.length === 0) return s;
+      const unreadCount = messages.filter(m => !m.isRead).length;
+      const isStarred = messages.some(m => m.isStarred);
+      const lastMsg = [...messages].sort((a, b) => b.timestamp - a.timestamp)[0];
+      return {
+        ...s,
+        unreadCount,
+        isStarred,
+        lastMessageAt: lastMsg.timestamp,
+        snippet: lastMsg.snippet
+      };
+    });
+  }
 }
 export class EmailEntity extends IndexedEntity<Email> {
   static readonly entityName = "email";
@@ -39,7 +59,6 @@ export class EmailEntity extends IndexedEntity<Email> {
     folder: "inbox"
   };
   static seedData = MOCK_EMAILS;
-  // Composite Indexing implementation for Relational-style queries
   static async getCompositeIndex(env: any, folder: FolderType) {
     return new Index<string>(env, `composite:folder:${folder}`);
   }
@@ -50,7 +69,6 @@ export class EmailEntity extends IndexedEntity<Email> {
     }
     for (const f of folders) {
       const idx = await this.getCompositeIndex(env, f);
-      // Key format: [padded_timestamp]:[id] - allows lexicographical sorting by time
       const sortKey = `${String(email.timestamp).padStart(15, '0')}:${email.id}`;
       if (isRemoving) {
         await idx.remove(sortKey);
@@ -63,44 +81,16 @@ export class EmailEntity extends IndexedEntity<Email> {
 export class MailboxEntity {
   static async listThreadsByFolder(env: any, folder: FolderType, limit = 50): Promise<EmailThread[]> {
     const compositeIdx = await EmailEntity.getCompositeIndex(env, folder);
-    const { items: sortKeys } = await compositeIdx.page(null, 500); // Fetch bulk to group into threads
-    // Extract IDs and fetch Emails
+    // Page for IDs
+    const { items: sortKeys } = await compositeIdx.page(null, 200);
     const emailIds = sortKeys.map(key => key.split(':')[1]);
+    // Fetch unique threads involved
     const emails = await Promise.all(emailIds.map(id => new EmailEntity(env, id).getState()));
-    // Group into threads
-    const threadMap = new Map<string, EmailThread>();
-    for (const email of emails) {
-      if (!email.id) continue;
-      let thread = threadMap.get(email.threadId);
-      if (!thread) {
-        const threadInstance = new ThreadEntity(env, email.threadId);
-        const threadData = await threadInstance.getState();
-        // If thread doesn't exist in storage yet (legacy or first message), initialize it
-        thread = threadData.id ? threadData : {
-          id: email.threadId,
-          subject: email.subject,
-          messages: [],
-          participantNames: [],
-          lastMessageAt: 0,
-          snippet: "",
-          unreadCount: 0,
-          isStarred: false,
-          folder: email.folder
-        };
-      }
-      thread.messages.push(email);
-      if (email.timestamp > thread.lastMessageAt) {
-        thread.lastMessageAt = email.timestamp;
-        thread.snippet = email.snippet;
-      }
-      if (!email.isRead) thread.unreadCount++;
-      if (email.isStarred) thread.isStarred = true;
-      if (!thread.participantNames.includes(email.from.name)) {
-        thread.participantNames.push(email.from.name);
-      }
-      threadMap.set(email.threadId, thread);
-    }
-    return Array.from(threadMap.values())
+    const threadIds = Array.from(new Set(emails.map(e => e.threadId).filter(Boolean)));
+    // Fetch and sort threads
+    const threads = await Promise.all(threadIds.map(tid => new ThreadEntity(env, tid).getState()));
+    return threads
+      .filter(t => t.id && t.folder === folder || (folder === 'starred' && t.isStarred))
       .sort((a, b) => b.lastMessageAt - a.lastMessageAt)
       .slice(0, limit);
   }
@@ -113,6 +103,7 @@ export class MailboxEntity {
     const threadInst = new ThreadEntity(env, email.threadId);
     await threadInst.mutate(s => {
       const isExisting = !!s.id;
+      const messages = isExisting ? [...s.messages, email] : [email];
       const participants = isExisting ? [...s.participantNames] : [];
       if (!participants.includes(email.from.name)) participants.push(email.from.name);
       return {
@@ -120,10 +111,10 @@ export class MailboxEntity {
         subject: isExisting ? s.subject : email.subject,
         lastMessageAt: Math.max(s.lastMessageAt || 0, email.timestamp),
         snippet: email.timestamp >= (s.lastMessageAt || 0) ? email.snippet : s.snippet,
-        messages: isExisting ? [...s.messages, email] : [email],
+        messages: messages.sort((a, b) => a.timestamp - b.timestamp),
         participantNames: participants,
-        unreadCount: (s.unreadCount || 0) + (email.isRead ? 0 : 1),
-        isStarred: s.isStarred || email.isStarred,
+        unreadCount: messages.filter(m => !m.isRead).length,
+        isStarred: messages.some(m => m.isStarred),
         folder: email.folder
       };
     });
