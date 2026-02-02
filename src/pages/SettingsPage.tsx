@@ -9,9 +9,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Button } from '@/components/ui/button';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Link } from 'react-router-dom';import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
-import { Moon, Sun, Trash2, RefreshCcw, User as UserIcon, Layout, Monitor, ShieldCheck } from 'lucide-react';
+import { Moon, Sun, Trash2, RefreshCcw, User as UserIcon, Layout, Monitor, ShieldCheck, HelpCircle, BookOpen, ChevronRight } from 'lucide-react';
 import { toast } from 'sonner';
 export function SettingsPage() {
   const { isDark, toggleTheme } = useTheme();
@@ -98,6 +98,25 @@ export function SettingsPage() {
               </CardContent>
             </Card>
           </section>
+
+          {/* Help & Documentation */}
+          <section className="space-y-4">
+            <div className="flex items-center gap-2 text-primary font-medium">
+              <HelpCircle className="h-5 w-5" /> Help & Resources
+            </div>
+            <Link to="/docs" className="block">
+              <Card className="rounded-m3-lg border-none bg-primary/5 hover:bg-primary/10 transition-colors shadow-sm cursor-pointer group">
+                <CardContent className="flex items-center justify-between p-6">
+                  <div className="flex items-center gap-4">
+                    <div className="h-10 w-10 rounded-full bg-primary/20 flex items-center justify-center text-primary"><BookOpen className="h-5 w-5" /></div>
+                    <div><p className="font-bold text-primary">Developer & PWA Guide</p><p className="text-xs text-on-surface-variant">Setup instructions, deployment, and PWA tips</p></div>
+                  </div>
+                  <ChevronRight className="h-5 w-5 text-primary group-hover:translate-x-1 transition-transform" />
+                </CardContent>
+              </Card>
+            </Link>
+          </section>
+
           {/* System */}
           <section className="space-y-4 pt-4 border-t border-surface-variant">
             <div className="flex items-center gap-2 text-destructive font-medium">
