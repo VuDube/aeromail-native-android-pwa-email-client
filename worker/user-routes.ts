@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import type { Env } from './core-utils';
 import { EmailEntity, MailboxEntity, UserEntity } from "./entities";
 import { ok, bad, notFound } from './core-utils';
-import { FolderType } from "@shared/types";
+import { FolderType, Email } from "@shared/types";
 export function userRoutes(app: Hono<{ Bindings: Env }>) {
   // SEED INITIAL DATA
   app.get('/api/init', async (c) => {
@@ -22,6 +22,32 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
     const entity = new EmailEntity(c.env, id);
     if (!await entity.exists()) return notFound(c, 'Email not found');
     return ok(c, await entity.getState());
+  });
+  app.patch('/api/emails/:id', async (c) => {
+    const id = c.req.param('id');
+    const updates = await c.req.json();
+    const entity = new EmailEntity(c.env, id);
+    if (!await entity.exists()) return notFound(c, 'Email not found');
+    await entity.patch(updates);
+    return ok(c, await entity.getState());
+  });
+  app.post('/api/emails/send', async (c) => {
+    const { to, subject, body } = await c.req.json() as { to: string, subject: string, body: string };
+    const email: Email = {
+      id: crypto.randomUUID(),
+      threadId: crypto.randomUUID(),
+      from: { name: "Current User", email: "user@aeromail.dev" },
+      to: [{ name: to.split('@')[0], email: to }],
+      subject,
+      snippet: body.slice(0, 100),
+      body,
+      timestamp: Date.now(),
+      isRead: true,
+      isStarred: false,
+      folder: "sent"
+    };
+    const created = await EmailEntity.create(c.env, email);
+    return ok(c, created);
   });
   // SIMULATION
   app.post('/api/simulation/inbound', async (c) => {
