@@ -77,13 +77,13 @@
   @apply bg-surface-1 rounded-m3-lg p-[var(--spacing-unit)] transition-colors hover:bg-surface-2;
 }
 .m3-fab {
-  @apply fixed bottom-6 right-6 h-14 w-14 rounded-m3-lg bg-primary-container text-on-primary-container shadow-lg flex items-center justify-center transition-transform active:scale-90 hover:scale-105 z-30;
+  @apply fixed bottom-6 right-6 h-14 w-14 rounded-m3-lg bg-primary-container text-primary-on-container shadow-lg flex items-center justify-center transition-transform active:scale-90 hover:scale-105 z-30;
 }
 .density-compact .m3-fab {
   @apply h-12 w-12 bottom-4 right-4;
 }
 .prose-email {
-  @apply text-on-surface leading-relaxed max-w-none;
+  @apply text-surface-on leading-relaxed max-w-none;
 }
 .density-compact .prose-email {
   @apply text-sm leading-normal;
@@ -95,7 +95,7 @@
   @apply text-primary underline;
 }
 .prose-email blockquote {
-  @apply border-l-4 border-surface-variant pl-4 italic text-on-surface-variant;
+  @apply border-l-4 border-surface-variant pl-4 italic text-surface-on-variant;
 }
 @keyframes swipe-reveal {
   from { opacity: 0; transform: scale(0.8); }

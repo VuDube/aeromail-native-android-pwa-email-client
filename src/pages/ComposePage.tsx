@@ -47,7 +47,7 @@ export function ComposePage() {
       }, 5000);
       return () => clearTimeout(timer);
     }
-  }, [form.watch('body'), form.watch('subject')]);
+  }, [form.formState.isDirty]);
   const sendEmail = useMutation({
     mutationFn: (data: ComposeFormValues) => api('/api/emails/send', { method: 'POST', body: JSON.stringify(data) }),
     onSuccess: () => {
@@ -75,21 +75,21 @@ export function ComposePage() {
                 )}
               </AnimatePresence>
               <Button variant="ghost" size="icon" className="rounded-full"><Paperclip className="h-5 w-5" /></Button>
-              <Button onClick={form.handleSubmit(onSubmit)} className="rounded-full bg-primary px-8 shadow-lg shadow-primary/20 gap-2">
+              <Button type="submit" form="compose-form" className="rounded-full bg-primary px-8 shadow-lg shadow-primary/20 gap-2">
                 <Send className="h-4 w-4" /> Send
               </Button>
             </div>
           </header>
-          <form className="flex-1 p-6 flex flex-col space-y-2 overflow-y-auto" onSubmit={form.handleSubmit(onSubmit)}>
+          <form id="compose-form" className="flex-1 p-6 flex flex-col space-y-2 overflow-y-auto" onSubmit={form.handleSubmit(onSubmit)}>
             <div className="relative">
               <div className="flex items-center border-b border-surface-variant py-3 focus-within:border-primary transition-colors">
-                <span className="text-sm font-bold text-on-surface-variant w-14">To</span>
+                <span className="text-sm font-bold text-surface-on-variant w-14">To</span>
                 <Input {...form.register('to')} placeholder="name@email.com" className="bg-transparent border-none shadow-none focus-visible:ring-0 text-sm h-auto p-0" />
               </div>
               <AnimatePresence>
                 {showSuggestions && (
                   <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="absolute left-14 top-12 z-50 bg-surface-1 border rounded-xl shadow-xl p-2 w-64">
-                    <p className="text-[10px] font-bold text-on-surface-variant px-3 py-1 uppercase tracking-wider">Suggested</p>
+                    <p className="text-[10px] font-bold text-surface-on-variant px-3 py-1 uppercase tracking-wider">Suggested</p>
                     {SUGGESTIONS.map(s => (
                       <button key={s} type="button" onClick={() => { form.setValue('to', s); setShowSuggestions(false); }} className="w-full text-left px-3 py-2 hover:bg-surface-2 rounded-lg text-sm transition-colors">{s}</button>
                     ))}
@@ -98,7 +98,7 @@ export function ComposePage() {
               </AnimatePresence>
             </div>
             <div className="flex items-center border-b border-surface-variant py-3 focus-within:border-primary transition-colors">
-              <span className="text-sm font-bold text-on-surface-variant w-14">Subject</span>
+              <span className="text-sm font-bold text-surface-on-variant w-14">Subject</span>
               <Input {...form.register('subject')} placeholder="What is this about?" className="bg-transparent border-none shadow-none focus-visible:ring-0 text-sm h-auto p-0" />
             </div>
             <div className="flex-1 pt-4">

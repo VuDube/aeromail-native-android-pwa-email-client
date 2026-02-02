@@ -30,7 +30,7 @@ export function ThreadPage() {
   });
   useEffect(() => {
     if (email && !email.isRead) markAsRead.mutate();
-  }, [email?.id]);
+  }, [email?.isRead]);
   const sendReply = useMutation({
     mutationFn: () => api('/api/emails/send', {
       method: 'POST',
@@ -40,7 +40,7 @@ export function ThreadPage() {
       toast.success("Reply sent");
       setReplyBody('');
       setIsReplying(false);
-    }
+    },
   });
   if (isLoading) return <AppLayout><div className="flex h-screen items-center justify-center"><Loader2 className="animate-spin text-primary h-10 w-10" /></div></AppLayout>;
   if (!email) return <AppLayout><div className="p-12 text-center font-bold">Thread not found</div></AppLayout>;
@@ -61,9 +61,9 @@ export function ThreadPage() {
           </div>
         </header>
         <div className="flex-1 overflow-y-auto space-y-8 pr-1 custom-scrollbar scroll-smooth">
-          <motion.h1 
+          <motion.h1
             layoutId={`subject-${email.id}`}
-            className="text-2xl md:text-3xl font-bold tracking-tight text-on-surface leading-tight"
+            className="text-2xl md:text-3xl font-bold tracking-tight text-surface-on leading-tight"
           >
             {email.subject}
           </motion.h1>
@@ -84,10 +84,10 @@ export function ThreadPage() {
                 </motion.div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between">
-                    <motion.span layoutId={`sender-${email.id}`} className="font-bold text-on-surface text-lg">{email.from.name}</motion.span>
-                    <span className="text-xs text-on-surface-variant/60 font-medium">{format(email.timestamp, 'MMM d, h:mm a')}</span>
+                    <motion.span layoutId={`sender-${email.id}`} className="font-bold text-surface-on text-lg">{email.from.name}</motion.span>
+                    <span className="text-xs text-surface-on-variant/60 font-medium">{format(email.timestamp, 'MMM d, h:mm a')}</span>
                   </div>
-                  <p className="text-xs text-on-surface-variant/80 truncate">to: {email.to.map(t => t.email).join(', ')}</p>
+                  <p className="text-xs text-surface-on-variant/80 truncate">to: {email.to.map(t => t.email).join(', ')}</p>
                 </div>
               </div>
               <div 
@@ -115,7 +115,7 @@ export function ThreadPage() {
                   value={replyBody}
                   onChange={(e) => setReplyBody(e.target.value)}
                   placeholder="Type your reply here..."
-                  className="bg-transparent border-none shadow-none focus-visible:ring-0 min-h-[160px] resize-none text-on-surface p-0 leading-relaxed"
+                  className="bg-transparent border-none shadow-none focus-visible:ring-0 min-h-[160px] resize-none text-surface-on p-0 leading-relaxed"
                 />
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-1">
@@ -139,9 +139,9 @@ export function ThreadPage() {
                 animate={{ opacity: 1 }}
                 className="flex gap-4 pb-4"
               >
-                <Button 
-                  onClick={() => setIsReplying(true)} 
-                  className="flex-1 rounded-full gap-2 h-14 bg-primary-container text-on-primary-container hover:bg-primary-container/80 transition-all font-bold"
+                <Button
+                  onClick={() => setIsReplying(true)}
+                  className="flex-1 rounded-full gap-2 h-14 bg-primary-container text-primary-on-container hover:bg-primary-container/80 transition-all font-bold"
                 >
                   <Reply className="h-5 w-5" /> Reply
                 </Button>
