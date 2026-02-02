@@ -10,12 +10,31 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
     await EmailEntity.ensureSeed(c.env);
     return ok(c, { initialized: true });
   });
+  // RESET SYSTEM
+  app.post('/api/init/reset', async (c) => {
+    const { items: emails } = await EmailEntity.list(c.env, null, 1000);
+    const { items: users } = await UserEntity.list(c.env, null, 100);
+    await EmailEntity.deleteMany(c.env, emails.map(e => e.id));
+    await UserEntity.deleteMany(c.env, users.map(u => u.id));
+    await UserEntity.ensureSeed(c.env);
+    await EmailEntity.ensureSeed(c.env);
+    return ok(c, { reset: true });
+  });
   // EMAILS
   app.get('/api/emails', async (c) => {
     const folder = (c.req.query('folder') as FolderType) || 'inbox';
     const limit = Number(c.req.query('limit')) || 50;
-    const emails = await MailboxEntity.listByFolder(c.env, folder, limit);
-    return ok(c, emails);
+    const { items: allEmails } = await EmailEntity.list(c.env, null, 200);
+    // Improved folder logic: Starred folder shows all starred items regardless of original folder
+    const filtered = allEmails
+      .filter(e => {
+        if (folder === 'starred') return e.isStarred && e.folder !== 'trash';
+        if (folder === 'trash') return e.folder === 'trash';
+        return e.folder === folder;
+      })
+      .sort((a, b) => b.timestamp - a.timestamp)
+      .slice(0, limit);
+    return ok(c, filtered);
   });
   app.get('/api/emails/:id', async (c) => {
     const id = c.req.param('id');

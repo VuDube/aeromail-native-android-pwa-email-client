@@ -14,7 +14,15 @@ import '@/index.css'
 import { HomePage } from '@/pages/HomePage'
 import { ThreadPage } from '@/pages/ThreadPage'
 import { ComposePage } from '@/pages/ComposePage'
-const queryClient = new QueryClient();
+import { SettingsPage } from '@/pages/SettingsPage'
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: 1,
+      refetchOnWindowFocus: false,
+    },
+  },
+});
 const router = createBrowserRouter([
   {
     path: "/",
@@ -22,8 +30,8 @@ const router = createBrowserRouter([
     errorElement: <RouteErrorBoundary />,
   },
   {
-    path: "/:folder",
-    element: <HomePage />,
+    path: "/settings",
+    element: <SettingsPage />,
     errorElement: <RouteErrorBoundary />,
   },
   {
@@ -34,6 +42,11 @@ const router = createBrowserRouter([
   {
     path: "/compose",
     element: <ComposePage />,
+    errorElement: <RouteErrorBoundary />,
+  },
+  {
+    path: "/:folder",
+    element: <HomePage />,
     errorElement: <RouteErrorBoundary />,
   },
 ]);

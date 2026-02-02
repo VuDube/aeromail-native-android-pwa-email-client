@@ -10,6 +10,7 @@ import DOMPurify from 'dompurify';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
 export function ThreadPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -24,23 +25,30 @@ export function ThreadPage() {
       method: 'PATCH',
       body: JSON.stringify({ isRead: true })
     }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['emails'] })
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['emails'] });
+      queryClient.invalidateQueries({ queryKey: ['email', id] });
+    }
   });
   const updateEmail = useMutation({
     mutationFn: (updates: Partial<Email>) => api(`/api/emails/${id}`, {
       method: 'PATCH',
       body: JSON.stringify(updates)
     }),
-    onSuccess: () => {
+    onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['email', id] });
       queryClient.invalidateQueries({ queryKey: ['emails'] });
+      if (variables.folder === 'trash') {
+        toast.success('Moved to trash');
+        navigate(-1);
+      }
     }
   });
   useEffect(() => {
-    if (email && !email.isRead) {
+    if (email && !email.isRead && !markAsRead.isPending) {
       markAsRead.mutate();
     }
-  }, [email?.isRead, id]);
+  }, [email, id, markAsRead.mutate, markAsRead.isPending]);
   if (isLoading) {
     return (
       <AppLayout>
@@ -54,45 +62,68 @@ export function ThreadPage() {
     return (
       <AppLayout>
         <div className="text-center py-20">
-          <p className="text-on-surface-variant font-medium">Email not found</p>
-          <Button variant="link" onClick={() => navigate(-1)}>Go back</Button>
+          <p className="text-on-surface-variant font-medium text-lg">Email not found</p>
+          <Button variant="link" onClick={() => navigate(-1)} className="text-primary">Go back</Button>
         </div>
       </AppLayout>
     );
   }
   return (
     <AppLayout>
-      <div className="max-w-4xl mx-auto px-4 py-6 md:py-10 space-y-8">
-        <header className="flex items-center justify-between sticky top-0 bg-background/80 backdrop-blur-sm py-2 z-10">
-          <Button variant="ghost" size="icon" onClick={() => navigate(-1)} className="rounded-full">
+      <div className="max-w-4xl mx-auto px-4 py-6 md:py-10 space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-300">
+        <header className="flex items-center justify-between sticky top-0 bg-background/95 backdrop-blur-md py-2 z-10 border-b md:border-none">
+          <Button variant="ghost" size="icon" onClick={() => navigate(-1)} className="rounded-full hover:bg-surface-variant">
             <ArrowLeft className="h-5 w-5" />
           </Button>
           <div className="flex items-center gap-1">
-            <Button variant="ghost" size="icon" onClick={() => updateEmail.mutate({ folder: 'trash' })} className="rounded-full">
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              onClick={() => updateEmail.mutate({ folder: 'trash' })} 
+              className="rounded-full hover:bg-surface-variant"
+              title="Archive"
+            >
               <Archive className="h-5 w-5" />
             </Button>
-            <Button variant="ghost" size="icon" onClick={() => updateEmail.mutate({ folder: 'trash' })} className="rounded-full">
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              onClick={() => updateEmail.mutate({ folder: 'trash' })} 
+              className="rounded-full hover:bg-surface-variant"
+              title="Delete"
+            >
               <Trash2 className="h-5 w-5" />
             </Button>
-            <Button variant="ghost" size="icon" onClick={() => updateEmail.mutate({ isRead: false })} className="rounded-full">
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              onClick={() => updateEmail.mutate({ isRead: false })} 
+              className="rounded-full hover:bg-surface-variant"
+              title="Mark as unread"
+            >
               <Mail className="h-5 w-5" />
             </Button>
-            <Button variant="ghost" size="icon" onClick={() => updateEmail.mutate({ isStarred: !email.isStarred })} className="rounded-full">
-              <Star className={cn("h-5 w-5", email.isStarred && "fill-tertiary text-tertiary")} />
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              onClick={() => updateEmail.mutate({ isStarred: !email.isStarred })} 
+              className="rounded-full hover:bg-surface-variant"
+            >
+              <Star className={cn("h-5 w-5 transition-colors", email.isStarred && "fill-tertiary text-tertiary")} />
             </Button>
-            <Button variant="ghost" size="icon" className="rounded-full">
+            <Button variant="ghost" size="icon" className="rounded-full hover:bg-surface-variant">
               <MoreVertical className="h-5 w-5" />
             </Button>
           </div>
         </header>
         <section className="space-y-6">
-          <h1 className="text-2xl font-medium text-on-surface leading-tight px-2">
+          <h1 className="text-2xl md:text-3xl font-medium text-on-surface leading-tight px-2">
             {email.subject}
           </h1>
-          <div className="flex items-start gap-4">
-            <Avatar className="h-12 w-12 border">
+          <div className="flex items-start gap-4 p-2 rounded-m3-lg bg-surface-1/50">
+            <Avatar className="h-12 w-12 border shadow-sm">
               <AvatarImage src={`https://avatar.vercel.sh/${email.from.email}`} />
-              <AvatarFallback className="bg-primary-container text-on-primary-container">
+              <AvatarFallback className="bg-primary-container text-on-primary-container font-bold">
                 {email.from.name.charAt(0)}
               </AvatarFallback>
             </Avatar>
@@ -106,15 +137,15 @@ export function ThreadPage() {
               </div>
             </div>
           </div>
-          <div 
-            className="prose-email whitespace-pre-wrap px-1"
+          <div
+            className="prose-email whitespace-pre-wrap px-2 min-h-[200px]"
             dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(email.body) }}
           />
-          <div className="pt-8 flex gap-3">
-            <Button variant="outline" className="rounded-full gap-2 border-surface-variant bg-transparent">
+          <div className="pt-8 pb-12 flex gap-3 border-t">
+            <Button variant="outline" className="rounded-full gap-2 border-surface-variant bg-transparent px-6">
               <Reply className="h-4 w-4" /> Reply
             </Button>
-            <Button variant="outline" className="rounded-full gap-2 border-surface-variant bg-transparent">
+            <Button variant="outline" className="rounded-full gap-2 border-surface-variant bg-transparent px-6">
               <MoreVertical className="h-4 w-4 rotate-90" /> Forward
             </Button>
           </div>

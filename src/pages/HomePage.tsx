@@ -1,11 +1,11 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useParams, Link } from 'react-router-dom';
 import { api } from '@/lib/api-client';
 import { AppLayout } from '@/components/layout/AppLayout';
-import { Email, FolderType } from '@shared/types';
+import { Email } from '@shared/types';
 import { format } from 'date-fns';
-import { Plus, Search, Star, Loader2, RefreshCw } from 'lucide-react';
+import { Plus, Search, Star, Loader2, RefreshCw, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Input } from '@/components/ui/input';
 import { toast } from 'sonner';
@@ -13,10 +13,21 @@ import { cn } from '@/lib/utils';
 export function HomePage() {
   const queryClient = useQueryClient();
   const { folder = 'inbox' } = useParams<{ folder: string }>();
+  const [searchQuery, setSearchQuery] = useState('');
   const { data: emails, isLoading, isFetching } = useQuery<Email[]>({
     queryKey: ['emails', folder],
     queryFn: () => api<Email[]>(`/api/emails?folder=${folder}`),
   });
+  const filteredEmails = useMemo(() => {
+    if (!emails) return [];
+    if (!searchQuery.trim()) return emails;
+    const q = searchQuery.toLowerCase();
+    return emails.filter(e => 
+      e.subject.toLowerCase().includes(q) || 
+      e.from.name.toLowerCase().includes(q) || 
+      e.snippet.toLowerCase().includes(q)
+    );
+  }, [emails, searchQuery]);
   const simulateInbound = useMutation({
     mutationFn: () => api('/api/simulation/inbound', {
       method: 'POST',
@@ -28,7 +39,7 @@ export function HomePage() {
     }
   });
   const toggleStar = useMutation({
-    mutationFn: ({ id, isStarred }: { id: string, isStarred: boolean }) => 
+    mutationFn: ({ id, isStarred }: { id: string, isStarred: boolean }) =>
       api(`/api/emails/${id}`, {
         method: 'PATCH',
         body: JSON.stringify({ isStarred: !isStarred })
@@ -36,10 +47,12 @@ export function HomePage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['emails'] })
   });
   useEffect(() => {
-    api('/api/init').then(() => queryClient.invalidateQueries({ queryKey: ['emails'] }));
-  }, [queryClient]);
-  const handleRefresh = () => {
-    queryClient.invalidateQueries({ queryKey: ['emails', folder] });
+    // Initial check to ensure seed data exists
+    api('/api/init').catch(console.error);
+  }, []);
+  const handleRefresh = async () => {
+    await queryClient.invalidateQueries({ queryKey: ['emails', folder] });
+    toast.info('Inbox updated');
   };
   return (
     <AppLayout>
@@ -49,27 +62,41 @@ export function HomePage() {
             <div className="relative group">
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-on-surface-variant opacity-50 group-focus-within:opacity-100 transition-opacity" />
               <Input
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search in mail"
-                className="w-full h-12 pl-12 rounded-m3-xl bg-surface-2 border-none focus-visible:ring-primary transition-all shadow-sm"
+                className="w-full h-12 pl-12 pr-12 rounded-m3-xl bg-surface-2 border-none focus-visible:ring-primary transition-all shadow-sm"
               />
+              {searchQuery && (
+                <button 
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 p-1 rounded-full hover:bg-surface-3 transition-colors"
+                >
+                  <X className="h-4 w-4 text-on-surface-variant" />
+                </button>
+              )}
             </div>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <h1 className="text-2xl font-medium text-on-surface capitalize">{folder}</h1>
-                <button 
+                <h1 className="text-2xl font-medium text-on-surface capitalize">
+                  {searchQuery ? 'Search Results' : folder}
+                </h1>
+                <button
                   onClick={handleRefresh}
                   className={cn("p-2 rounded-full hover:bg-surface-2 transition-colors", isFetching && "animate-spin")}
                 >
                   <RefreshCw className="h-4 w-4 text-on-surface-variant" />
                 </button>
               </div>
-              <button
-                onClick={() => simulateInbound.mutate()}
-                className="text-xs font-medium text-primary hover:underline bg-primary/5 px-3 py-1.5 rounded-full"
-                disabled={simulateInbound.isPending}
-              >
-                Simulate Inbound
-              </button>
+              {!searchQuery && (
+                <button
+                  onClick={() => simulateInbound.mutate()}
+                  className="text-xs font-medium text-primary hover:underline bg-primary/5 px-3 py-1.5 rounded-full"
+                  disabled={simulateInbound.isPending}
+                >
+                  Simulate Inbound
+                </button>
+              )}
             </div>
           </header>
           <section className="space-y-1">
@@ -80,22 +107,23 @@ export function HomePage() {
               </div>
             ) : (
               <AnimatePresence mode="popLayout">
-                {emails?.map((email, idx) => (
+                {filteredEmails.map((email, idx) => (
                   <motion.div
                     key={email.id}
                     layout
                     initial={{ opacity: 0, scale: 0.95 }}
                     animate={{ opacity: 1, scale: 1 }}
                     exit={{ opacity: 0, scale: 0.95 }}
-                    transition={{ duration: 0.2, delay: idx * 0.02 }}
+                    transition={{ duration: 0.2, delay: idx * 0.01 }}
                     className={cn(
-                      "group relative flex items-start gap-4 p-4 rounded-m3-lg cursor-pointer transition-all border border-transparent",
+                      "group relative flex items-start gap-4 p-4 rounded-m3-lg cursor-pointer transition-all border border-transparent mb-1",
                       email.isRead ? 'bg-transparent hover:bg-surface-1' : 'bg-surface-2 hover:bg-surface-3'
                     )}
                   >
-                    <button 
+                    <button
                       onClick={(e) => {
                         e.preventDefault();
+                        e.stopPropagation();
                         toggleStar.mutate({ id: email.id, isStarred: email.isStarred });
                       }}
                       className="shrink-0 pt-1 z-10"
@@ -110,7 +138,7 @@ export function HomePage() {
                         <div className="flex items-center justify-between gap-2 mb-0.5">
                           <div className="flex items-center gap-2">
                             {!email.isRead && <div className="h-2 w-2 rounded-full bg-primary" />}
-                            <span className={cn("text-sm truncate", !email.isRead ? 'font-bold' : 'font-medium text-on-surface-variant')}>
+                            <span className={cn("text-sm truncate", !email.isRead ? 'font-bold text-on-surface' : 'font-medium text-on-surface-variant')}>
                               {email.from.name}
                             </span>
                           </div>
@@ -118,7 +146,7 @@ export function HomePage() {
                             {format(email.timestamp, 'MMM d, h:mm a')}
                           </span>
                         </div>
-                        <h3 className={cn("text-sm truncate mb-0.5", !email.isRead ? 'font-semibold' : 'text-on-surface')}>
+                        <h3 className={cn("text-sm truncate mb-0.5", !email.isRead ? 'font-semibold text-on-surface' : 'text-on-surface-variant')}>
                           {email.subject}
                         </h3>
                         <p className="text-xs text-on-surface-variant line-clamp-1 opacity-70">
@@ -130,27 +158,44 @@ export function HomePage() {
                 ))}
               </AnimatePresence>
             )}
-            {!isLoading && emails?.length === 0 && (
+            {!isLoading && filteredEmails.length === 0 && (
               <div className="text-center py-20 space-y-4">
-                <div className="text-6xl grayscale opacity-50">📭</div>
+                <div className="text-6xl grayscale opacity-50">
+                  {searchQuery ? '🔍' : '📭'}
+                </div>
                 <div className="space-y-1">
-                  <p className="text-on-surface font-medium text-lg">Your {folder} is empty</p>
-                  <p className="text-on-surface-variant text-sm">Messages in this folder will appear here.</p>
+                  <p className="text-on-surface font-medium text-lg">
+                    {searchQuery ? `No results for "${searchQuery}"` : `Your ${folder} is empty`}
+                  </p>
+                  <p className="text-on-surface-variant text-sm">
+                    {searchQuery ? 'Try searching for different keywords.' : 'Messages in this folder will appear here.'}
+                  </p>
                 </div>
               </div>
             )}
           </section>
         </div>
       </div>
-      <Link to="/compose">
-        <button
-          className="m3-fab lg:h-16 lg:w-44 lg:rounded-2xl lg:gap-3"
-          aria-label="Compose email"
-        >
-          <Plus className="h-6 w-6" />
-          <span className="hidden lg:block font-medium">Compose</span>
-        </button>
-      </Link>
+      {/* Hide FAB when searching on mobile to save space */}
+      <AnimatePresence>
+        {(!searchQuery || window.innerWidth > 768) && (
+          <motion.div
+            initial={{ scale: 0, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0, opacity: 0 }}
+          >
+            <Link to="/compose">
+              <button
+                className="m3-fab lg:h-16 lg:w-44 lg:rounded-2xl lg:gap-3 z-30"
+                aria-label="Compose email"
+              >
+                <Plus className="h-6 w-6" />
+                <span className="hidden lg:block font-medium text-sm">Compose</span>
+              </button>
+            </Link>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </AppLayout>
   );
 }
