@@ -34,7 +34,6 @@ export interface Email {
   isStarred: boolean;
   folder: FolderType;
   attachments?: EmailAttachment[];
-  // Composite key for indexing: folder:timestamp:id
   indexKey?: string;
 }
 export interface EmailThread {
@@ -45,6 +44,6 @@ export interface EmailThread {
   messages: Email[];
   participantNames: string[];
   unreadCount: number;
-  isStarred: boolean; // Computed: true if any message in thread is starred
+  isStarred: boolean;
   folder: FolderType;
 }
