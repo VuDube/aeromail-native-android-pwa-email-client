@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo, useRef } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useParams, Link } from 'react-router-dom';
 import { api } from '@/lib/api-client';
@@ -8,6 +8,7 @@ import { format } from 'date-fns';
 import { Plus, Search, Star, Loader2, RefreshCw, X, WifiOff, Download } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 export function HomePage() {
@@ -16,7 +17,6 @@ export function HomePage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
-
   useEffect(() => {
     const handleOnline = () => setIsOffline(false);
     const handleOffline = () => setIsOffline(true);
@@ -33,7 +33,6 @@ export function HomePage() {
       window.removeEventListener('beforeinstallprompt', handleBeforeInstall);
     };
   }, []);
-
   const { data: emails, isLoading, isFetching } = useQuery<Email[]>({
     queryKey: ['emails', folder],
     queryFn: () => api<Email[]>(`/api/emails?folder=${folder}`),
@@ -42,9 +41,9 @@ export function HomePage() {
     if (!emails) return [];
     if (!searchQuery.trim()) return emails;
     const q = searchQuery.toLowerCase();
-    return emails.filter(e => 
-      e.subject.toLowerCase().includes(q) || 
-      e.from.name.toLowerCase().includes(q) || 
+    return emails.filter(e =>
+      e.subject.toLowerCase().includes(q) ||
+      e.from.name.toLowerCase().includes(q) ||
       e.snippet.toLowerCase().includes(q)
     );
   }, [emails, searchQuery]);
@@ -67,21 +66,18 @@ export function HomePage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['emails'] })
   });
   useEffect(() => {
-    // Initial check to ensure seed data exists
     api('/api/init').catch(console.error);
   }, []);
   const handleRefresh = async () => {
     await queryClient.invalidateQueries({ queryKey: ['emails', folder] });
     toast.info('Inbox updated');
   };
-
   const handleInstall = async () => {
     if (!deferredPrompt) return;
     deferredPrompt.prompt();
     const { outcome } = await deferredPrompt.userChoice;
     if (outcome === 'accepted') setDeferredPrompt(null);
   };
-
   return (
     <AppLayout>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -96,7 +92,7 @@ export function HomePage() {
                 className="w-full h-12 pl-12 pr-12 rounded-m3-xl bg-surface-2 border-none focus-visible:ring-primary transition-all shadow-sm"
               />
               {searchQuery && (
-                <button 
+                <button
                   onClick={() => setSearchQuery('')}
                   className="absolute right-4 top-1/2 -translate-y-1/2 p-1 rounded-full hover:bg-surface-3 transition-colors"
                 >
@@ -130,13 +126,13 @@ export function HomePage() {
                       Install
                     </Button>
                   )}
-                <button
-                  onClick={() => simulateInbound.mutate()}
-                  className="text-xs font-medium text-primary hover:underline bg-primary/5 px-3 py-1.5 rounded-full"
-                  disabled={simulateInbound.isPending}
-                >
-                  Simulate Inbound
-                </button>
+                  <button
+                    onClick={() => simulateInbound.mutate()}
+                    className="text-xs font-medium text-primary hover:underline bg-primary/5 px-3 py-1.5 rounded-full"
+                    disabled={simulateInbound.isPending}
+                  >
+                    Simulate Inbound
+                  </button>
                 </div>
               )}
             </div>
@@ -218,7 +214,6 @@ export function HomePage() {
           </section>
         </div>
       </div>
-      {/* Hide FAB when searching on mobile to save space */}
       <AnimatePresence>
         {(!searchQuery || window.innerWidth > 768) && (
           <motion.div

@@ -44,11 +44,12 @@ export function ThreadPage() {
       }
     }
   });
+  const { mutate: doMarkAsRead, isPending: isMarkingRead } = markAsRead;
   useEffect(() => {
-    if (email && !email.isRead && !markAsRead.isPending) {
-      markAsRead.mutate();
+    if (email && !email.isRead && !isMarkingRead) {
+      doMarkAsRead();
     }
-  }, [email, id, markAsRead.mutate, markAsRead.isPending, markAsRead]);
+  }, [email, isMarkingRead, doMarkAsRead]);
   if (isLoading) {
     return (
       <AppLayout>
@@ -76,37 +77,37 @@ export function ThreadPage() {
             <ArrowLeft className="h-5 w-5" />
           </Button>
           <div className="flex items-center gap-1">
-            <Button 
-              variant="ghost" 
-              size="icon" 
-              onClick={() => updateEmail.mutate({ folder: 'trash' })} 
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => updateEmail.mutate({ folder: 'trash' })}
               className="rounded-full hover:bg-surface-variant"
               title="Archive"
             >
               <Archive className="h-5 w-5" />
             </Button>
-            <Button 
-              variant="ghost" 
-              size="icon" 
-              onClick={() => updateEmail.mutate({ folder: 'trash' })} 
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => updateEmail.mutate({ folder: 'trash' })}
               className="rounded-full hover:bg-surface-variant"
               title="Delete"
             >
               <Trash2 className="h-5 w-5" />
             </Button>
-            <Button 
-              variant="ghost" 
-              size="icon" 
-              onClick={() => updateEmail.mutate({ isRead: false })} 
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => updateEmail.mutate({ isRead: false })}
               className="rounded-full hover:bg-surface-variant"
               title="Mark as unread"
             >
               <Mail className="h-5 w-5" />
             </Button>
-            <Button 
-              variant="ghost" 
-              size="icon" 
-              onClick={() => updateEmail.mutate({ isStarred: !email.isStarred })} 
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => updateEmail.mutate({ isStarred: !email.isStarred })}
               className="rounded-full hover:bg-surface-variant"
             >
               <Star className={cn("h-5 w-5 transition-colors", email.isStarred && "fill-tertiary text-tertiary")} />
