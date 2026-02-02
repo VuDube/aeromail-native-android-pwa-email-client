@@ -1,111 +1,156 @@
 import React, { useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useParams, Link } from 'react-router-dom';
 import { api } from '@/lib/api-client';
 import { AppLayout } from '@/components/layout/AppLayout';
-import { Email } from '@shared/types';
+import { Email, FolderType } from '@shared/types';
 import { format } from 'date-fns';
-import { Plus, Search, Star, Loader2 } from 'lucide-react';
+import { Plus, Search, Star, Loader2, RefreshCw } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Input } from '@/components/ui/input';
 import { toast } from 'sonner';
+import { cn } from '@/lib/utils';
 export function HomePage() {
   const queryClient = useQueryClient();
-  const { data: emails, isLoading } = useQuery<Email[]>({
-    queryKey: ['emails', 'inbox'],
-    queryFn: () => api<Email[]>('/api/emails?folder=inbox'),
+  const { folder = 'inbox' } = useParams<{ folder: string }>();
+  const { data: emails, isLoading, isFetching } = useQuery<Email[]>({
+    queryKey: ['emails', folder],
+    queryFn: () => api<Email[]>(`/api/emails?folder=${folder}`),
   });
   const simulateInbound = useMutation({
-    mutationFn: () => api('/api/simulation/inbound', { 
-      method: 'POST', 
-      body: JSON.stringify({ subject: `New Message ${Date.now()}` }) 
+    mutationFn: () => api('/api/simulation/inbound', {
+      method: 'POST',
+      body: JSON.stringify({ subject: `New Message ${Date.now()}` })
     }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['emails'] });
       toast.success('New email received!');
     }
   });
+  const toggleStar = useMutation({
+    mutationFn: ({ id, isStarred }: { id: string, isStarred: boolean }) => 
+      api(`/api/emails/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ isStarred: !isStarred })
+      }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['emails'] })
+  });
   useEffect(() => {
-    // Initial data seed if empty
     api('/api/init').then(() => queryClient.invalidateQueries({ queryKey: ['emails'] }));
   }, [queryClient]);
+  const handleRefresh = () => {
+    queryClient.invalidateQueries({ queryKey: ['emails', folder] });
+  };
   return (
     <AppLayout>
-      <div className="space-y-6">
-        <header className="flex flex-col gap-4">
-          <div className="relative group">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-on-surface-variant opacity-50 group-focus-within:opacity-100 transition-opacity" />
-            <Input 
-              placeholder="Search in mail" 
-              className="w-full h-12 pl-12 rounded-m3-xl bg-surface-2 border-none focus-visible:ring-primary transition-all shadow-sm"
-            />
-          </div>
-          <div className="flex items-center justify-between">
-            <h1 className="text-2xl font-medium text-on-surface px-2">Inbox</h1>
-            <button 
-              onClick={() => simulateInbound.mutate()}
-              className="text-xs font-medium text-primary hover:underline bg-primary/5 px-2 py-1 rounded"
-              disabled={simulateInbound.isPending}
-            >
-              Simulate Inbound
-            </button>
-          </div>
-        </header>
-        <section className="space-y-1">
-          {isLoading ? (
-            <div className="flex flex-col items-center justify-center py-20 gap-3 text-muted-foreground">
-              <Loader2 className="h-8 w-8 animate-spin text-primary" />
-              <p className="text-sm font-medium">Syncing your inbox...</p>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="py-8 md:py-10 lg:py-12 space-y-6">
+          <header className="flex flex-col gap-4">
+            <div className="relative group">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-on-surface-variant opacity-50 group-focus-within:opacity-100 transition-opacity" />
+              <Input
+                placeholder="Search in mail"
+                className="w-full h-12 pl-12 rounded-m3-xl bg-surface-2 border-none focus-visible:ring-primary transition-all shadow-sm"
+              />
             </div>
-          ) : (
-            <AnimatePresence initial={false}>
-              {emails?.map((email, idx) => (
-                <motion.div
-                  key={email.id}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: idx * 0.03 }}
-                  className={`flex items-start gap-4 p-4 rounded-m3-lg cursor-pointer transition-colors group ${
-                    email.isRead ? 'bg-transparent hover:bg-surface-1' : 'bg-surface-2 hover:bg-surface-3'
-                  }`}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <h1 className="text-2xl font-medium text-on-surface capitalize">{folder}</h1>
+                <button 
+                  onClick={handleRefresh}
+                  className={cn("p-2 rounded-full hover:bg-surface-2 transition-colors", isFetching && "animate-spin")}
                 >
-                  <div className="shrink-0 pt-1">
-                    <Star className={`h-5 w-5 ${email.isStarred ? 'fill-tertiary text-tertiary' : 'text-on-surface-variant opacity-30'}`} />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between gap-2 mb-0.5">
-                      <span className={`text-sm truncate ${!email.isRead ? 'font-bold' : 'font-medium'}`}>
-                        {email.from.name}
-                      </span>
-                      <span className="text-[10px] text-on-surface-variant shrink-0 font-medium">
-                        {format(email.timestamp, 'h:mm a')}
-                      </span>
-                    </div>
-                    <h3 className={`text-sm truncate mb-0.5 ${!email.isRead ? 'font-semibold' : 'text-on-surface'}`}>
-                      {email.subject}
-                    </h3>
-                    <p className="text-xs text-on-surface-variant line-clamp-1 opacity-70">
-                      {email.snippet}
-                    </p>
-                  </div>
-                </motion.div>
-              ))}
-            </AnimatePresence>
-          )}
-          {!isLoading && emails?.length === 0 && (
-            <div className="text-center py-20 space-y-2">
-              <div className="text-4xl">📭</div>
-              <p className="text-on-surface-variant font-medium">Your inbox is empty</p>
+                  <RefreshCw className="h-4 w-4 text-on-surface-variant" />
+                </button>
+              </div>
+              <button
+                onClick={() => simulateInbound.mutate()}
+                className="text-xs font-medium text-primary hover:underline bg-primary/5 px-3 py-1.5 rounded-full"
+                disabled={simulateInbound.isPending}
+              >
+                Simulate Inbound
+              </button>
             </div>
-          )}
-        </section>
+          </header>
+          <section className="space-y-1">
+            {isLoading ? (
+              <div className="flex flex-col items-center justify-center py-20 gap-3 text-muted-foreground">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                <p className="text-sm font-medium">Syncing your inbox...</p>
+              </div>
+            ) : (
+              <AnimatePresence mode="popLayout">
+                {emails?.map((email, idx) => (
+                  <motion.div
+                    key={email.id}
+                    layout
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.95 }}
+                    transition={{ duration: 0.2, delay: idx * 0.02 }}
+                    className={cn(
+                      "group relative flex items-start gap-4 p-4 rounded-m3-lg cursor-pointer transition-all border border-transparent",
+                      email.isRead ? 'bg-transparent hover:bg-surface-1' : 'bg-surface-2 hover:bg-surface-3'
+                    )}
+                  >
+                    <button 
+                      onClick={(e) => {
+                        e.preventDefault();
+                        toggleStar.mutate({ id: email.id, isStarred: email.isStarred });
+                      }}
+                      className="shrink-0 pt-1 z-10"
+                    >
+                      <Star className={cn(
+                        "h-5 w-5 transition-colors",
+                        email.isStarred ? 'fill-tertiary text-tertiary' : 'text-on-surface-variant opacity-30 hover:opacity-100'
+                      )} />
+                    </button>
+                    <Link to={`/thread/${email.id}`} className="flex-1 min-w-0 flex items-start gap-4">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between gap-2 mb-0.5">
+                          <div className="flex items-center gap-2">
+                            {!email.isRead && <div className="h-2 w-2 rounded-full bg-primary" />}
+                            <span className={cn("text-sm truncate", !email.isRead ? 'font-bold' : 'font-medium text-on-surface-variant')}>
+                              {email.from.name}
+                            </span>
+                          </div>
+                          <span className="text-[10px] text-on-surface-variant shrink-0 font-medium">
+                            {format(email.timestamp, 'MMM d, h:mm a')}
+                          </span>
+                        </div>
+                        <h3 className={cn("text-sm truncate mb-0.5", !email.isRead ? 'font-semibold' : 'text-on-surface')}>
+                          {email.subject}
+                        </h3>
+                        <p className="text-xs text-on-surface-variant line-clamp-1 opacity-70">
+                          {email.snippet}
+                        </p>
+                      </div>
+                    </Link>
+                  </motion.div>
+                ))}
+              </AnimatePresence>
+            )}
+            {!isLoading && emails?.length === 0 && (
+              <div className="text-center py-20 space-y-4">
+                <div className="text-6xl grayscale opacity-50">📭</div>
+                <div className="space-y-1">
+                  <p className="text-on-surface font-medium text-lg">Your {folder} is empty</p>
+                  <p className="text-on-surface-variant text-sm">Messages in this folder will appear here.</p>
+                </div>
+              </div>
+            )}
+          </section>
+        </div>
       </div>
-      <button 
-        className="m3-fab lg:h-16 lg:w-44 lg:rounded-2xl lg:gap-3"
-        aria-label="Compose email"
-      >
-        <Plus className="h-6 w-6" />
-        <span className="hidden lg:block font-medium">Compose</span>
-      </button>
+      <Link to="/compose">
+        <button
+          className="m3-fab lg:h-16 lg:w-44 lg:rounded-2xl lg:gap-3"
+          aria-label="Compose email"
+        >
+          <Plus className="h-6 w-6" />
+          <span className="hidden lg:block font-medium">Compose</span>
+        </button>
+      </Link>
     </AppLayout>
   );
 }
