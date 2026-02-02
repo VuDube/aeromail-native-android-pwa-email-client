@@ -80,7 +80,8 @@ function runSetupCommands() {
     const commands = [
     "bun add dompurify@^3.1.7",
     "bun add postal-mime",
-    "bun add dompurify"
+    "bun add dompurify",
+    "bun add zod"
 ];
     
     if (commands.length === 0) {
