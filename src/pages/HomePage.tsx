@@ -94,7 +94,7 @@ function SwipeableEmailCard({ email, idx, density, onArchive, onToggleRead, onTo
           >
             <Star className={cn(
               "h-5 w-5 transition-all duration-200",
-              email.isStarred ? 'fill-yellow-500 text-yellow-500 scale-110' : 'text-on-surface-variant/30 hover:text-on-surface-variant'
+              email.isStarred ? 'fill-yellow-500 text-yellow-500 scale-110' : 'text-surface-on-variant/30 hover:text-surface-on-variant'
             )} />
           </motion.button>
         </div>
@@ -103,28 +103,28 @@ function SwipeableEmailCard({ email, idx, density, onArchive, onToggleRead, onTo
             <motion.span 
               layoutId={`sender-${email.id}`}
               className={cn(
-                "truncate", 
-                density === 'compact' ? "text-xs" : "text-sm", 
-                !email.isRead ? 'font-bold text-on-surface' : 'font-medium text-on-surface-variant'
+                "truncate",
+                density === 'compact' ? "text-xs" : "text-sm",
+                !email.isRead ? 'font-bold text-surface-on' : 'font-medium text-surface-on-variant'
               )}
             >
               {email.from.name}
             </motion.span>
-            <span className="text-[10px] text-on-surface-variant shrink-0 font-medium">
+            <span className="text-[10px] text-surface-on-variant shrink-0 font-medium">
               {format(email.timestamp, 'MMM d')}
             </span>
           </div>
           <motion.h3 
             layoutId={`subject-${email.id}`}
             className={cn(
-              "truncate mb-0.5", 
-              density === 'compact' ? "text-xs" : "text-sm", 
-              !email.isRead ? 'font-semibold text-on-surface' : 'text-on-surface-variant/80'
+              "truncate mb-0.5",
+              density === 'compact' ? "text-xs" : "text-sm",
+              !email.isRead ? 'font-semibold text-surface-on' : 'text-surface-on-variant/80'
             )}
           >
             {email.subject}
           </motion.h3>
-          <p className="text-xs text-on-surface-variant/60 line-clamp-1">
+          <p className="text-xs text-surface-on-variant/60 line-clamp-1">
             {email.snippet}
           </p>
         </Link>
@@ -180,7 +180,7 @@ export function HomePage() {
         <div className={cn("py-4 md:py-6 lg:py-8 space-y-6")}>
           <header className="flex flex-col gap-4">
             <div className="relative group">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-on-surface-variant opacity-50 group-focus-within:opacity-100 transition-opacity" />
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-surface-on-variant opacity-50 group-focus-within:opacity-100 transition-opacity" />
               <Input
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
@@ -190,7 +190,7 @@ export function HomePage() {
             </div>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <h1 className="text-xl font-bold text-on-surface capitalize tracking-tight">
+                <h1 className="text-xl font-bold text-surface-on capitalize tracking-tight">
                   {searchQuery ? 'Search' : folder}
                 </h1>
                 {isFetching && <Loader2 className="h-4 w-4 animate-spin text-primary" />}
@@ -237,11 +237,11 @@ export function HomePage() {
                 className="flex flex-col items-center justify-center py-32 text-center gap-6"
               >
                 <div className="h-24 w-24 bg-surface-2 rounded-full flex items-center justify-center">
-                  <InboxIcon className="h-10 w-10 text-on-surface-variant/20" />
+                  <InboxIcon className="h-10 w-10 text-surface-on-variant/20" />
                 </div>
                 <div className="space-y-1">
                   <h3 className="text-lg font-bold">Mailbox is empty</h3>
-                  <p className="text-sm text-on-surface-variant/60 max-w-[200px]">You have no messages in {folder}.</p>
+                  <p className="text-sm text-surface-on-variant/60 max-w-[200px]">You have no messages in {folder}.</p>
                 </div>
               </motion.div>
             )}
