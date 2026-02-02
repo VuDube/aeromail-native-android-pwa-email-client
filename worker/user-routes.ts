@@ -6,9 +6,14 @@ import { FolderType, Email } from "@shared/types";
 export function userRoutes(app: Hono<{ Bindings: Env }>) {
   // SEED INITIAL DATA
   app.get('/api/init', async (c) => {
-    await UserEntity.ensureSeed(c.env);
-    await EmailEntity.ensureSeed(c.env);
-    return ok(c, { initialized: true });
+    try {
+      await UserEntity.ensureSeed(c.env);
+      await EmailEntity.ensureSeed(c.env);
+      return ok(c, { initialized: true });
+    } catch (e) {
+      console.error('[INIT ERROR]', e);
+      return bad(c, 'Failed to initialize data: ' + (e instanceof Error ? e.message : String(e)));
+    }
   });
   // RESET SYSTEM
   app.post('/api/init/reset', async (c) => {
@@ -23,18 +28,21 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
   // EMAILS
   app.get('/api/emails', async (c) => {
     const folder = (c.req.query('folder') as FolderType) || 'inbox';
-    const limit = Number(c.req.query('limit')) || 50;
-    const { items: allEmails } = await EmailEntity.list(c.env, null, 200);
-    // Improved folder logic: Starred folder shows all starred items regardless of original folder
-    const filtered = allEmails
-      .filter(e => {
-        if (folder === 'starred') return e.isStarred && e.folder !== 'trash';
-        if (folder === 'trash') return e.folder === 'trash';
-        return e.folder === folder;
-      })
-      .sort((a, b) => b.timestamp - a.timestamp)
-      .slice(0, limit);
-    return ok(c, filtered);
+    const limit = Math.min(Number(c.req.query('limit')) || 50, 200);
+    try {
+      const { items: allEmails } = await EmailEntity.list(c.env, null, 200);
+      const filtered = allEmails
+        .filter(e => {
+          if (folder === 'starred') return e.isStarred && e.folder !== 'trash';
+          if (folder === 'trash') return e.folder === 'trash';
+          return e.folder === folder;
+        })
+        .sort((a, b) => b.timestamp - a.timestamp)
+        .slice(0, limit);
+      return ok(c, filtered);
+    } catch (e) {
+      return bad(c, 'Failed to fetch emails');
+    }
   });
   app.get('/api/emails/:id', async (c) => {
     const id = c.req.param('id');
