@@ -1,68 +1,87 @@
 import { Hono } from "hono";
 import type { Env } from './core-utils';
-import { EmailEntity, MailboxEntity, UserEntity } from "./entities";
+import { EmailEntity, MailboxEntity, UserEntity, ThreadEntity } from "./entities";
 import { ok, bad, notFound } from './core-utils';
 import { FolderType, Email } from "@shared/types";
 export function userRoutes(app: Hono<{ Bindings: Env }>) {
-  // SEED INITIAL DATA
   app.get('/api/init', async (c) => {
     try {
       await UserEntity.ensureSeed(c.env);
       await EmailEntity.ensureSeed(c.env);
+      // Re-index seeded emails if needed
+      const { items: emails } = await EmailEntity.list(c.env, null, 100);
+      for (const email of emails) {
+        await EmailEntity.updateCompositeIndexes(c.env, email);
+      }
       return ok(c, { initialized: true });
     } catch (e) {
-      console.error('[INIT ERROR]', e);
-      return bad(c, 'Failed to initialize data: ' + (e instanceof Error ? e.message : String(e)));
+      return bad(c, 'Failed to initialize: ' + String(e));
     }
   });
-  // RESET SYSTEM
   app.post('/api/init/reset', async (c) => {
     const { items: emails } = await EmailEntity.list(c.env, null, 1000);
+    const { items: threads } = await ThreadEntity.list(c.env, null, 1000);
     const { items: users } = await UserEntity.list(c.env, null, 100);
+    // Clear all entities and indices
     await EmailEntity.deleteMany(c.env, emails.map(e => e.id));
+    await ThreadEntity.deleteMany(c.env, threads.map(t => t.id));
     await UserEntity.deleteMany(c.env, users.map(u => u.id));
+    // Clear composite indexes specifically
+    const folders: FolderType[] = ['inbox', 'sent', 'drafts', 'trash', 'starred'];
+    for (const f of folders) {
+      const idx = await EmailEntity.getCompositeIndex(c.env, f);
+      await idx.clear();
+    }
     await UserEntity.ensureSeed(c.env);
     await EmailEntity.ensureSeed(c.env);
+    // Re-index seeds
+    const { items: freshEmails } = await EmailEntity.list(c.env, null, 100);
+    for (const e of freshEmails) {
+      await EmailEntity.updateCompositeIndexes(c.env, e);
+    }
     return ok(c, { reset: true });
   });
-  // EMAILS
   app.get('/api/emails', async (c) => {
     const folder = (c.req.query('folder') as FolderType) || 'inbox';
-    const limit = Math.min(Number(c.req.query('limit')) || 50, 200);
+    const limit = Math.min(Number(c.req.query('limit')) || 20, 100);
     try {
-      const { items: allEmails } = await EmailEntity.list(c.env, null, 200);
-      const filtered = allEmails
-        .filter(e => {
-          if (folder === 'starred') return e.isStarred && e.folder !== 'trash';
-          if (folder === 'trash') return e.folder === 'trash';
-          return e.folder === folder;
-        })
-        .sort((a, b) => b.timestamp - a.timestamp)
-        .slice(0, limit);
-      return ok(c, filtered);
+      // Use the new Thread-optimized list logic
+      const threads = await MailboxEntity.listThreadsByFolder(c.env, folder, limit);
+      return ok(c, threads);
     } catch (e) {
-      return bad(c, 'Failed to fetch emails');
+      console.error('[LIST ERROR]', e);
+      return bad(c, 'Failed to fetch mailbox');
     }
   });
   app.get('/api/emails/:id', async (c) => {
     const id = c.req.param('id');
     const entity = new EmailEntity(c.env, id);
     if (!await entity.exists()) return notFound(c, 'Email not found');
-    return ok(c, await entity.getState());
+    const email = await entity.getState();
+    // JOIN simulation: Fetch full thread
+    const threadEntity = new ThreadEntity(c.env, email.threadId);
+    const thread = await threadEntity.getState();
+    return ok(c, { ...email, thread });
   });
   app.patch('/api/emails/:id', async (c) => {
     const id = c.req.param('id');
     const updates = await c.req.json();
     const entity = new EmailEntity(c.env, id);
     if (!await entity.exists()) return notFound(c, 'Email not found');
-    await entity.patch(updates);
-    return ok(c, await entity.getState());
+    const oldState = await entity.getState();
+    const newState = await entity.mutate(s => ({ ...s, ...updates }));
+    // If folder or star status changed, update indexes
+    if (oldState.folder !== newState.folder || oldState.isStarred !== newState.isStarred) {
+      await EmailEntity.updateCompositeIndexes(c.env, oldState, true);
+      await EmailEntity.updateCompositeIndexes(c.env, newState);
+    }
+    return ok(c, newState);
   });
   app.post('/api/emails/send', async (c) => {
-    const { to, subject, body } = await c.req.json() as { to: string, subject: string, body: string };
+    const { to, subject, body, threadId } = await c.req.json();
     const email: Email = {
       id: crypto.randomUUID(),
-      threadId: crypto.randomUUID(),
+      threadId: threadId || crypto.randomUUID(),
       from: { name: "Current User", email: "user@aeromail.dev" },
       to: [{ name: to.split('@')[0], email: to }],
       subject,
@@ -73,16 +92,14 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
       isStarred: false,
       folder: "sent"
     };
-    const created = await EmailEntity.create(c.env, email);
-    return ok(c, created);
+    await MailboxEntity.processNewEmail(c.env, email);
+    return ok(c, email);
   });
-  // SIMULATION
   app.post('/api/simulation/inbound', async (c) => {
-    const { subject } = await c.req.json() as { subject?: string };
+    const { subject } = await c.req.json();
     const email = await MailboxEntity.simulateInbound(c.env, subject || "Test Inbound Email");
     return ok(c, email);
   });
-  // USERS
   app.get('/api/me', async (c) => {
     const users = await UserEntity.list(c.env, null, 1);
     if (users.items.length === 0) {
