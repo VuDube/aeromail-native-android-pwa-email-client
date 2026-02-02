@@ -3,22 +3,44 @@ export interface ApiResponse<T = unknown> {
   data?: T;
   error?: string;
 }
-
-// Minimal real-world chat example types (shared by frontend and worker)
+export type FolderType = 'inbox' | 'sent' | 'drafts' | 'trash' | 'starred';
 export interface User {
   id: string;
   name: string;
+  email: string;
+  avatarUrl?: string;
 }
-
-export interface Chat {
-  id: string;
-  title: string;
+export interface UserPreferences {
+  theme: 'light' | 'dark' | 'system';
+  density: 'comfortable' | 'compact';
 }
-
-export interface ChatMessage {
+export interface Email {
   id: string;
-  chatId: string;
-  userId: string;
-  text: string;
-  ts: number; // epoch millis
+  threadId: string;
+  from: { name: string; email: string };
+  to: { name: string; email: string }[];
+  subject: string;
+  body: string;
+  snippet: string;
+  timestamp: number;
+  isRead: boolean;
+  isStarred: boolean;
+  folder: FolderType;
+  attachments?: EmailAttachment[];
+}
+export interface EmailAttachment {
+  id: string;
+  filename: string;
+  contentType: string;
+  size: number;
+  url: string;
+}
+export interface EmailThread {
+  id: string;
+  lastMessageAt: number;
+  snippet: string;
+  subject: string;
+  messages: Email[];
+  participantNames: string[];
+  unreadCount: number;
 }

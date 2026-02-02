@@ -1,138 +1,111 @@
-// Home page of the app.
-// Currently a demo placeholder "please wait" screen.
-// Replace this file with your actual app UI. Do not delete it to use some other file as homepage. Simply replace the entire contents of this file.
-
-import { useEffect, useMemo, useState } from 'react'
-import { Sparkles } from 'lucide-react'
-
-import { ThemeToggle } from '@/components/ThemeToggle'
-import { HAS_TEMPLATE_DEMO, TemplateDemo } from '@/components/TemplateDemo'
-import { Button } from '@/components/ui/button'
-import { Toaster, toast } from '@/components/ui/sonner'
-
-function formatDuration(ms: number): string {
-  const total = Math.max(0, Math.floor(ms / 1000))
-  const m = Math.floor(total / 60)
-  const s = total % 60
-  return `${m}:${s.toString().padStart(2, '0')}`
-}
-
+import React, { useEffect } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { api } from '@/lib/api-client';
+import { AppLayout } from '@/components/layout/AppLayout';
+import { Email } from '@shared/types';
+import { format } from 'date-fns';
+import { Plus, Search, Star, Loader2 } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Input } from '@/components/ui/input';
+import { toast } from 'sonner';
 export function HomePage() {
-  const [coins, setCoins] = useState(0)
-  const [isRunning, setIsRunning] = useState(false)
-  const [startedAt, setStartedAt] = useState<number | null>(null)
-  const [elapsedMs, setElapsedMs] = useState(0)
-
-  useEffect(() => {
-    if (!isRunning || startedAt === null) return
-
-    const t = setInterval(() => {
-      setElapsedMs(Date.now() - startedAt)
-    }, 250)
-
-    return () => clearInterval(t)
-  }, [isRunning, startedAt])
-
-  const formatted = useMemo(() => formatDuration(elapsedMs), [elapsedMs])
-
-  const onPleaseWait = () => {
-    setCoins((c) => c + 1)
-
-    if (!isRunning) {
-      // Resume from the current elapsed time
-      setStartedAt(Date.now() - elapsedMs)
-      setIsRunning(true)
-      toast.success('Building your app…', {
-        description: "Hang tight — we're setting everything up.",
-      })
-      return
+  const queryClient = useQueryClient();
+  const { data: emails, isLoading } = useQuery<Email[]>({
+    queryKey: ['emails', 'inbox'],
+    queryFn: () => api<Email[]>('/api/emails?folder=inbox'),
+  });
+  const simulateInbound = useMutation({
+    mutationFn: () => api('/api/simulation/inbound', { 
+      method: 'POST', 
+      body: JSON.stringify({ subject: `New Message ${Date.now()}` }) 
+    }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['emails'] });
+      toast.success('New email received!');
     }
-
-    setIsRunning(false)
-    toast.info('Still working…', {
-      description: 'You can come back in a moment.',
-    })
-  }
-
-  const onReset = () => {
-    setCoins(0)
-    setIsRunning(false)
-    setStartedAt(null)
-    setElapsedMs(0)
-    toast('Reset complete')
-  }
-
-  const onAddCoin = () => {
-    setCoins((c) => c + 1)
-    toast('Coin added')
-  }
-
+  });
+  useEffect(() => {
+    // Initial data seed if empty
+    api('/api/init').then(() => queryClient.invalidateQueries({ queryKey: ['emails'] }));
+  }, [queryClient]);
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-background text-foreground p-4 overflow-hidden relative">
-      <ThemeToggle />
-      <div className="absolute inset-0 bg-gradient-rainbow opacity-10 dark:opacity-20 pointer-events-none" />
-
-      <div className="text-center space-y-8 relative z-10 animate-fade-in w-full">
-        <div className="flex justify-center">
-          <div className="w-16 h-16 rounded-2xl bg-gradient-primary flex items-center justify-center shadow-primary floating">
-            <Sparkles className="w-8 h-8 text-white rotating" />
+    <AppLayout>
+      <div className="space-y-6">
+        <header className="flex flex-col gap-4">
+          <div className="relative group">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-on-surface-variant opacity-50 group-focus-within:opacity-100 transition-opacity" />
+            <Input 
+              placeholder="Search in mail" 
+              className="w-full h-12 pl-12 rounded-m3-xl bg-surface-2 border-none focus-visible:ring-primary transition-all shadow-sm"
+            />
           </div>
-        </div>
-
-        <div className="space-y-3">
-          <h1 className="text-5xl md:text-7xl font-display font-bold text-balance leading-tight">
-            Creating your <span className="text-gradient">app</span>
-          </h1>
-          <p className="text-lg md:text-xl text-muted-foreground max-w-xl mx-auto text-pretty">
-            Your application would be ready soon.
-          </p>
-        </div>
-
-        {HAS_TEMPLATE_DEMO ? (
-          <div className="max-w-5xl mx-auto text-left">
-            <TemplateDemo />
+          <div className="flex items-center justify-between">
+            <h1 className="text-2xl font-medium text-on-surface px-2">Inbox</h1>
+            <button 
+              onClick={() => simulateInbound.mutate()}
+              className="text-xs font-medium text-primary hover:underline bg-primary/5 px-2 py-1 rounded"
+              disabled={simulateInbound.isPending}
+            >
+              Simulate Inbound
+            </button>
           </div>
-        ) : (
-          <>
-            <div className="flex justify-center gap-4">
-              <Button
-                size="lg"
-                onClick={onPleaseWait}
-                className="btn-gradient px-8 py-4 text-lg font-semibold hover:-translate-y-0.5 transition-all duration-200"
-                aria-live="polite"
-              >
-                Please Wait
-              </Button>
+        </header>
+        <section className="space-y-1">
+          {isLoading ? (
+            <div className="flex flex-col items-center justify-center py-20 gap-3 text-muted-foreground">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              <p className="text-sm font-medium">Syncing your inbox...</p>
             </div>
-
-            <div className="flex items-center justify-center gap-6 text-sm text-muted-foreground">
-              <div>
-                Time elapsed:{' '}
-                <span className="font-medium tabular-nums text-foreground">{formatted}</span>
-              </div>
-              <div>
-                Coins:{' '}
-                <span className="font-medium tabular-nums text-foreground">{coins}</span>
-              </div>
+          ) : (
+            <AnimatePresence initial={false}>
+              {emails?.map((email, idx) => (
+                <motion.div
+                  key={email.id}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: idx * 0.03 }}
+                  className={`flex items-start gap-4 p-4 rounded-m3-lg cursor-pointer transition-colors group ${
+                    email.isRead ? 'bg-transparent hover:bg-surface-1' : 'bg-surface-2 hover:bg-surface-3'
+                  }`}
+                >
+                  <div className="shrink-0 pt-1">
+                    <Star className={`h-5 w-5 ${email.isStarred ? 'fill-tertiary text-tertiary' : 'text-on-surface-variant opacity-30'}`} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-2 mb-0.5">
+                      <span className={`text-sm truncate ${!email.isRead ? 'font-bold' : 'font-medium'}`}>
+                        {email.from.name}
+                      </span>
+                      <span className="text-[10px] text-on-surface-variant shrink-0 font-medium">
+                        {format(email.timestamp, 'h:mm a')}
+                      </span>
+                    </div>
+                    <h3 className={`text-sm truncate mb-0.5 ${!email.isRead ? 'font-semibold' : 'text-on-surface'}`}>
+                      {email.subject}
+                    </h3>
+                    <p className="text-xs text-on-surface-variant line-clamp-1 opacity-70">
+                      {email.snippet}
+                    </p>
+                  </div>
+                </motion.div>
+              ))}
+            </AnimatePresence>
+          )}
+          {!isLoading && emails?.length === 0 && (
+            <div className="text-center py-20 space-y-2">
+              <div className="text-4xl">📭</div>
+              <p className="text-on-surface-variant font-medium">Your inbox is empty</p>
             </div>
-
-            <div className="flex justify-center gap-2">
-              <Button variant="outline" size="sm" onClick={onReset}>
-                Reset
-              </Button>
-              <Button variant="outline" size="sm" onClick={onAddCoin}>
-                Add Coin
-              </Button>
-            </div>
-          </>
-        )}
+          )}
+        </section>
       </div>
-
-      <footer className="absolute bottom-8 text-center text-muted-foreground/80">
-        <p>Powered by Cloudflare</p>
-      </footer>
-
-      <Toaster richColors closeButton />
-    </div>
-  )
+      <button 
+        className="m3-fab lg:h-16 lg:w-44 lg:rounded-2xl lg:gap-3"
+        aria-label="Compose email"
+      >
+        <Plus className="h-6 w-6" />
+        <span className="hidden lg:block font-medium">Compose</span>
+      </button>
+    </AppLayout>
+  );
 }
