@@ -30,7 +30,7 @@ export function ThreadPage() {
   });
   useEffect(() => {
     if (email && !email.isRead) markAsRead.mutate();
-  }, [email?.isRead]);
+  }, [email, markAsRead]);
   const sendReply = useMutation({
     mutationFn: () => api('/api/emails/send', {
       method: 'POST',

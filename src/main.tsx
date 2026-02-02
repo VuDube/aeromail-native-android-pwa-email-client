@@ -14,6 +14,7 @@ import '@/index.css'
 import { HomePage } from '@/pages/HomePage'
 import { ThreadPage } from '@/pages/ThreadPage'
 import { ComposePage } from '@/pages/ComposePage'
+import { DocsPage } from '@/pages/DocsPage'
 import { SettingsPage } from '@/pages/SettingsPage'
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -32,6 +33,11 @@ const router = createBrowserRouter([
   {
     path: "/settings",
     element: <SettingsPage />,
+    errorElement: <RouteErrorBoundary />,
+  },
+  {
+    path: "/docs",
+    element: <DocsPage />,
     errorElement: <RouteErrorBoundary />,
   },
   {
