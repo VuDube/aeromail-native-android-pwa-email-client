@@ -48,7 +48,7 @@ export function ThreadPage() {
     if (email && !email.isRead && !markAsRead.isPending) {
       markAsRead.mutate();
     }
-  }, [email, id, markAsRead.mutate, markAsRead.isPending]);
+  }, [email, id, markAsRead.mutate, markAsRead.isPending, markAsRead]);
   if (isLoading) {
     return (
       <AppLayout>

@@ -1,11 +1,11 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useParams, Link } from 'react-router-dom';
 import { api } from '@/lib/api-client';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Email } from '@shared/types';
 import { format } from 'date-fns';
-import { Plus, Search, Star, Loader2, RefreshCw, X } from 'lucide-react';
+import { Plus, Search, Star, Loader2, RefreshCw, X, WifiOff, Download } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Input } from '@/components/ui/input';
 import { toast } from 'sonner';
@@ -14,6 +14,26 @@ export function HomePage() {
   const queryClient = useQueryClient();
   const { folder = 'inbox' } = useParams<{ folder: string }>();
   const [searchQuery, setSearchQuery] = useState('');
+  const [isOffline, setIsOffline] = useState(!navigator.onLine);
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+
+  useEffect(() => {
+    const handleOnline = () => setIsOffline(false);
+    const handleOffline = () => setIsOffline(true);
+    const handleBeforeInstall = (e: any) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+    };
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    window.addEventListener('beforeinstallprompt', handleBeforeInstall);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstall);
+    };
+  }, []);
+
   const { data: emails, isLoading, isFetching } = useQuery<Email[]>({
     queryKey: ['emails', folder],
     queryFn: () => api<Email[]>(`/api/emails?folder=${folder}`),
@@ -54,6 +74,14 @@ export function HomePage() {
     await queryClient.invalidateQueries({ queryKey: ['emails', folder] });
     toast.info('Inbox updated');
   };
+
+  const handleInstall = async () => {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    if (outcome === 'accepted') setDeferredPrompt(null);
+  };
+
   return (
     <AppLayout>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -81,6 +109,12 @@ export function HomePage() {
                 <h1 className="text-2xl font-medium text-on-surface capitalize">
                   {searchQuery ? 'Search Results' : folder}
                 </h1>
+                {isOffline && (
+                  <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-destructive/10 text-destructive text-[10px] font-bold uppercase tracking-wider">
+                    <WifiOff className="h-3 w-3" />
+                    Offline
+                  </div>
+                )}
                 <button
                   onClick={handleRefresh}
                   className={cn("p-2 rounded-full hover:bg-surface-2 transition-colors", isFetching && "animate-spin")}
@@ -88,7 +122,14 @@ export function HomePage() {
                   <RefreshCw className="h-4 w-4 text-on-surface-variant" />
                 </button>
               </div>
-              {!searchQuery && (
+              {!searchQuery && !isOffline && (
+                <div className="flex items-center gap-2">
+                  {deferredPrompt && (
+                    <Button variant="outline" size="sm" onClick={handleInstall} className="rounded-full h-8 text-xs gap-1.5 border-primary/20 text-primary">
+                      <Download className="h-3.5 w-3.5" />
+                      Install
+                    </Button>
+                  )}
                 <button
                   onClick={() => simulateInbound.mutate()}
                   className="text-xs font-medium text-primary hover:underline bg-primary/5 px-3 py-1.5 rounded-full"
@@ -96,6 +137,7 @@ export function HomePage() {
                 >
                   Simulate Inbound
                 </button>
+                </div>
               )}
             </div>
           </header>
