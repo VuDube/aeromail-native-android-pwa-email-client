@@ -77,7 +77,10 @@ function updateWranglerJsonc() {
 }
 
 function runSetupCommands() {
-    const commands = [];
+    const commands = [
+    "bun add dompurify@^3.1.7",
+    "bun add postal-mime"
+];
     
     if (commands.length === 0) {
         console.log('⊘ No setup commands to run');
