@@ -18,7 +18,7 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
       mode: db ? 'production' : 'development',
       storage: db ? 'Cloudflare D1' : 'No Binding Found',
       healthy: true,
-      version: '1.0.5-stable',
+      version: '1.1.0-master',
       location: 'Global Edge'
     });
   });
@@ -63,18 +63,13 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
         "SELECT * FROM threads WHERE folder = ? OR (? = 'starred' AND is_starred = 1) ORDER BY last_message_at DESC"
       ).bind(folder, folder).all();
       const threads = await Promise.all(results.map(async (t: any) => {
-        const msgs = await db.prepare("SELECT * FROM emails WHERE thread_id = ? ORDER BY timestamp ASC").bind(t.id).all();
+        const msgs = await db.prepare("SELECT from_name FROM emails WHERE thread_id = ?").bind(t.id).all();
         return {
           ...t,
           lastMessageAt: t.last_message_at,
           unreadCount: t.unread_count,
           isStarred: !!t.is_starred,
-          participantNames: Array.from(new Set(msgs.results.map((m: any) => m.from_name))),
-          messages: msgs.results.map((m: any) => ({ 
-            ...m, 
-            from: { name: m.from_name, email: m.from_email }, 
-            to: JSON.parse(m.to_json) 
-          }))
+          participantNames: Array.from(new Set(msgs.results.map((m: any) => m.from_name)))
         };
       }));
       return ok(c, threads);
@@ -95,10 +90,10 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
       lastMessageAt: threadRecord.last_message_at,
       isStarred: !!threadRecord.is_starred,
       unreadCount: threadRecord.unread_count,
-      messages: msgs.results.map((m: any) => ({ 
-        ...m, 
-        from: { name: m.from_name, email: m.from_email }, 
-        to: JSON.parse(m.to_json) 
+      messages: msgs.results.map((m: any) => ({
+        ...m,
+        from: { name: m.from_name, email: m.from_email },
+        to: JSON.parse(m.to_json)
       }))
     };
     return ok(c, { ...thread.messages[thread.messages.length - 1], thread });
@@ -151,8 +146,8 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
     const db = c.env.EMAIL_DB;
     const threadId = crypto.randomUUID();
     const ts = Date.now();
-    const subject = "Urgent: Server Status Update";
-    const body = "We've detected a significant performance improvement across the edge nodes after the D1 migration. Please review the new dashboard statistics.";
+    const subject = "Urgent: Performance Metrics";
+    const body = "We have successfully migrated all legacy data to D1. Edge latency is down 40%.";
     try {
       await db.batch([
         db.prepare("INSERT INTO threads (id, subject, last_message_at, snippet, unread_count, folder) VALUES (?, ?, ?, ?, 1, 'inbox')").bind(threadId, subject, ts, body.slice(0, 100)),

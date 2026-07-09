@@ -5,7 +5,7 @@ import { ApiResponse } from "../../shared/types"
  */
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 15000); 
+  const timeoutId = setTimeout(() => controller.abort(), 15000);
   try {
     const res = await fetch(path, {
       headers: {
@@ -25,15 +25,15 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
                           rawText.includes('500 Internal Server Error') ||
                           rawText.toLowerCase().includes('binding');
       if (isConfigError) {
-        throw new Error("Production Configuration Error: The 'EMAIL_DB' D1 binding is missing from your wrangler.jsonc or was not properly initialized.");
+        throw new Error("Production Configuration Error: The 'EMAIL_DB' D1 binding is missing from your wrangler.jsonc or was not properly initialized. Check the Docs view for setup commands.");
       }
-      throw new Error(`Critical: Unexpected API response (Status: ${res.status}).`);
+      throw new Error(`Critical: Unexpected API response (Status: ${res.status}). Ensure your worker is running and bindings are configured.`);
     }
     if (!res.ok || !json.success || json.data === undefined) {
       const errMsg = json.error || `Request failed with status ${res.status}`;
       // Specifically guide users on D1 requirements
       if (errMsg.toLowerCase().includes('binding') || errMsg.toLowerCase().includes('d1')) {
-        throw new Error("Relational Storage Unavailable: This action requires a Cloudflare D1 database. Please ensure your environment is configured for production.");
+        throw new Error("Relational Storage Unavailable: This action requires a Cloudflare D1 database binding named 'EMAIL_DB'.");
       }
       throw new Error(errMsg);
     }

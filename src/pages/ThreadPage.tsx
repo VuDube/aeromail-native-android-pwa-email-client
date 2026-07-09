@@ -109,16 +109,18 @@ export function ThreadPage() {
   );
   if (!thread) return (
     <AppLayout>
-      <div className="max-w-7xl mx-auto px-4 py-20 text-center">
-        <h2 className="text-2xl font-black mb-4">Conversation not found</h2>
-        <Button onClick={() => navigate('/')} className="rounded-full px-8">Back to Inbox</Button>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="py-20 text-center">
+          <h2 className="text-2xl font-black mb-4">Conversation not found</h2>
+          <Button onClick={() => navigate('/')} className="rounded-full px-8">Back to Inbox</Button>
+        </div>
       </div>
     </AppLayout>
   );
   return (
     <AppLayout>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="py-8 md:py-10 lg:py-12 flex flex-col min-h-screen">
+        <div className="py-8 md:py-10 lg:py-12">
           <div className="max-w-4xl mx-auto w-full pb-40">
             <header className="sticky top-0 bg-background/80 backdrop-blur-xl z-[20] py-4 flex items-center justify-between border-b border-surface-variant/10 mb-10">
               <div className="flex items-center gap-2 min-w-0">

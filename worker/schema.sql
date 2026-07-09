@@ -25,7 +25,7 @@ CREATE TABLE IF NOT EXISTS emails (
   from_email TEXT NOT NULL,
   to_json TEXT NOT NULL, -- JSON formatted recipient list
   subject TEXT NOT NULL,
-  body TEXT NOT NULL,    -- Using TEXT for unlimited MIME body storage
+  body TEXT NOT NULL,    -- Unlimited content length
   snippet TEXT,
   timestamp INTEGER NOT NULL,
   is_read INTEGER DEFAULT 0,

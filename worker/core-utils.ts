@@ -12,36 +12,36 @@ export interface Env {
  * Standard Success Response Helper
  */
 export const ok = <T>(c: Context, data: T) => {
-  return c.json({ 
-    success: true, 
-    data 
+  return c.json({
+    success: true,
+    data
   } as ApiResponse<T>);
 };
 /**
  * Standard Error Response Helper (400 Bad Request)
  */
 export const bad = (c: Context, error: string) => {
-  return c.json({ 
-    success: false, 
-    error 
+  return c.json({
+    success: false,
+    error
   } as ApiResponse, 400);
 };
 /**
  * Standard Not Found Helper (404)
  */
 export const notFound = (c: Context, error = 'Resource not found') => {
-  return c.json({ 
-    success: false, 
-    error 
+  return c.json({
+    success: false,
+    error
   } as ApiResponse, 404);
 };
 /**
  * Internal Server Error Helper (500)
  */
 export const internalError = (c: Context, error: string) => {
-  return c.json({ 
-    success: false, 
-    error 
+  return c.json({
+    success: false,
+    error
   } as ApiResponse, 500);
 };
 /**
