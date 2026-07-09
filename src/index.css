@@ -71,10 +71,10 @@
   }
 }
 .m3-card {
-  @apply bg-surface-1 rounded-m3-lg p-[var(--spacing-unit)] transition-all duration-300 hover:bg-surface-2 active:scale-[0.98] ease-[cubic-bezier(0.4,0,0.2,1)];
+  @apply bg-surface-1 rounded-m3-lg p-[var(--spacing-unit)] transition-all duration-300 hover:bg-surface-2 active:scale-[0.98] ease-m3-standard;
 }
 .m3-fab {
-  @apply fixed bottom-8 right-8 h-16 w-16 rounded-[28px] bg-primary text-primary-foreground shadow-2xl flex items-center justify-center transition-all duration-300 hover:scale-110 active:scale-90 z-30 ease-[cubic-bezier(0.4,0,0.2,1)];
+  @apply fixed bottom-8 right-8 h-16 w-16 rounded-[28px] bg-primary text-primary-foreground shadow-2xl flex items-center justify-center transition-all duration-300 hover:scale-110 active:scale-90 z-30 ease-m3-standard;
 }
 .prose-email {
   @apply text-on-surface leading-relaxed max-w-none whitespace-pre-wrap font-sans text-base;

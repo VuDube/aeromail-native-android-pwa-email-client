@@ -71,6 +71,7 @@ export function ThreadPage() {
     mutationFn: (threadId: string) => api(`/api/threads/${threadId}/read`, { method: 'POST' }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['threads'] });
+      if (id) queryClient.invalidateQueries({ queryKey: ['email', id] });
     },
   });
   useEffect(() => {
@@ -81,7 +82,7 @@ export function ThreadPage() {
       }, 1000); // Small delay to ensure user actually started reading
       return () => clearTimeout(timeoutId);
     }
-  }, [thread?.id, thread?.unreadCount]);
+  }, [thread?.id, thread?.unreadCount, markThreadAsRead]);
   const sendReply = useMutation({
     mutationFn: ({ to, subject, body, threadId }: { to: string; subject: string; body: string; threadId: string }) =>
       api('/api/emails/send', {

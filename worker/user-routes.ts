@@ -22,7 +22,10 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
         ...MOCK_EMAILS.map(e => db.prepare("INSERT INTO emails (id, thread_id, from_name, from_email, to_json, subject, body, snippet, timestamp, folder) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT DO NOTHING").bind(e.id, e.threadId, e.from.name, e.from.email, JSON.stringify(e.to), e.subject, e.body, e.snippet, e.timestamp, e.folder))
       ]);
       return ok(c, { initialized: true });
-    } catch (e) { return bad(c, String(e)); }
+    } catch (e) { 
+      console.error("[INIT ERROR] D1 Database operation failed. Check if EMAIL_DB binding exists.", e);
+      return bad(c, `Initialization failed: ${String(e)}`); 
+    }
   });
   app.post('/api/init/reset', async (c) => {
     const db = getDB(c);
@@ -32,7 +35,7 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
   });
   app.post('/api/simulate/inbound', async (c) => {
     const db = getDB(c);
-    if (!db) return bad(c, "No DB");
+    if (!db) return bad(c, "Simulation unavailable: No D1 Database binding 'EMAIL_DB' found. You are running in Mock Mode.");
     const threadId = crypto.randomUUID();
     const ts = Date.now();
     const subject = "Urgent: Conversation Stream Testing";
@@ -48,7 +51,7 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
   app.get('/api/emails', async (c) => {
     const db = getDB(c);
     const folder = c.req.query('folder') || 'inbox';
-    if (!db) return ok(c, []);
+    if (!db) { console.warn("[DB WARNING] EMAIL_DB binding missing. Returning empty mock list."); return ok(c, []); }
     const { results } = await db.prepare("SELECT * FROM threads WHERE folder = ? OR (? = 'starred' AND is_starred = 1) ORDER BY last_message_at DESC").bind(folder, folder).all();
     const threads = await Promise.all(results.map(async (t: any) => {
       const msgs = await db.prepare("SELECT * FROM emails WHERE thread_id = ? ORDER BY timestamp ASC").bind(t.id).all();
