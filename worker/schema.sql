@@ -1,5 +1,6 @@
 -- AeroMail Production Schema for Cloudflare D1
--- Initializing core tables for the relational email architecture
+-- IDEMPOTENCY: All statements use IF NOT EXISTS to prevent migration collisions
+-- EXECUTION: wrangler d1 execute aeromail-db --file=./worker/schema.sql
 -- 1. Users Table
 CREATE TABLE IF NOT EXISTS users (
   id TEXT PRIMARY KEY,
@@ -48,7 +49,13 @@ CREATE TABLE IF NOT EXISTS user_domains (
   FOREIGN KEY (user_id) REFERENCES users(id),
   FOREIGN KEY (domain_id) REFERENCES domains(id)
 );
--- 5. Performance Indices
+-- 5. Application Metadata (Configuration persistence)
+CREATE TABLE IF NOT EXISTS app_metadata (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+-- 6. Performance Indices
 CREATE INDEX IF NOT EXISTS idx_emails_thread ON emails(thread_id);
 CREATE INDEX IF NOT EXISTS idx_emails_folder_ts ON emails(folder, timestamp DESC);
 CREATE INDEX IF NOT EXISTS idx_threads_folder_ts ON threads(folder, last_message_at DESC);

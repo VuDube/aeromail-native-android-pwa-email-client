@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button';
 import { Link } from 'react-router-dom';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+import { Badge } from '@/components/ui/badge';
 import {
   Moon,
   Sun,
@@ -25,7 +26,10 @@ import {
   BookOpen,
   ChevronRight,
   MailPlus,
-  Wand2
+  Wand2,
+  Database,
+  CloudOff,
+  AlertTriangle
 } from 'lucide-react';
 import { toast } from 'sonner';
 export function SettingsPage() {
@@ -36,6 +40,11 @@ export function SettingsPage() {
     queryKey: ['me'],
     queryFn: () => api<User>('/api/me'),
   });
+  const { data: status } = useQuery({
+    queryKey: ['status'],
+    queryFn: () => api<any>('/api/status'),
+  });
+  const isMockMode = status?.mode === 'mock';
   const resetData = useMutation({
     mutationFn: () => api('/api/init/reset', { method: 'POST' }),
     onSuccess: () => {
@@ -49,7 +58,7 @@ export function SettingsPage() {
       queryClient.invalidateQueries({ queryKey: ['threads'] });
       toast.success('Incoming email simulated! Check your inbox.');
     },
-    onError: (err) => {
+    onError: (err: any) => {
       toast.error('Simulation failed: ' + err.message);
     }
   });
@@ -66,11 +75,31 @@ export function SettingsPage() {
     <AppLayout>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="py-8 md:py-10 lg:py-12 space-y-10">
-          <header>
-            <h1 className="text-3xl font-bold text-on-surface tracking-tight">Settings</h1>
-            <p className="text-on-surface-variant">Configure your personal email experience</p>
+          <header className="flex items-center justify-between">
+            <div className="space-y-1">
+              <h1 className="text-3xl font-bold text-on-surface tracking-tight">Settings</h1>
+              <p className="text-on-surface-variant">Configure your personal email experience</p>
+            </div>
+            {status && (
+              <Badge variant={isMockMode ? "outline" : "secondary"} className={isMockMode ? "border-yellow-500/50 text-yellow-600 bg-yellow-50" : "bg-green-100 text-green-700"}>
+                {isMockMode ? <CloudOff className="h-3 w-3 mr-1" /> : <Database className="h-3 w-3 mr-1" />}
+                {isMockMode ? "Mock Mode" : "Production D1"}
+              </Badge>
+            )}
           </header>
           <div className="grid gap-8 max-w-4xl">
+            {isMockMode && (
+              <section className="bg-yellow-50 border border-yellow-200 rounded-m3-lg p-6 flex gap-4">
+                <AlertTriangle className="h-6 w-6 text-yellow-600 shrink-0" />
+                <div className="space-y-1">
+                  <p className="font-bold text-yellow-800">Database Binding Missing</p>
+                  <p className="text-sm text-yellow-700 leading-relaxed">
+                    AeroMail is currently running in **Mock Fallback Mode** because the Cloudflare D1 binding is not detected. 
+                    Actions like "Simulate Email" and "Send" are disabled. Check your <code>wrangler.jsonc</code> configuration.
+                  </p>
+                </div>
+              </section>
+            )}
             {/* Identity */}
             <section className="space-y-4">
               <div className="flex items-center gap-2 text-primary font-bold">
@@ -140,9 +169,9 @@ export function SettingsPage() {
                     <Label className="text-base font-bold">Inbound Simulation</Label>
                     <p className="text-xs text-on-surface-variant">Trigger a realistic mock incoming email</p>
                   </div>
-                  <Button 
-                    onClick={() => simulateInbound.mutate()} 
-                    disabled={simulateInbound.isPending}
+                  <Button
+                    onClick={() => simulateInbound.mutate()}
+                    disabled={simulateInbound.isPending || isMockMode}
                     className="rounded-full gap-2 px-6 bg-primary-container text-primary-on-container hover:bg-primary/20"
                   >
                     {simulateInbound.isPending ? <RefreshCcw className="h-4 w-4 animate-spin" /> : <MailPlus className="h-4 w-4" />}
@@ -173,7 +202,7 @@ export function SettingsPage() {
                 </Card>
               </Link>
             </section>
-            {/* System */}
+            {/* Maintenance */}
             <section className="space-y-4 pt-8 border-t border-surface-variant/20">
               <div className="flex items-center gap-2 text-destructive font-bold">
                 <Monitor className="h-5 w-5" /> Maintenance
@@ -196,7 +225,7 @@ export function SettingsPage() {
                     size="sm"
                     onClick={() => window.confirm('Reset all data?') && resetData.mutate()}
                     className="rounded-full"
-                    disabled={resetData.isPending}
+                    disabled={resetData.isPending || isMockMode}
                   >
                     {resetData.isPending ? <RefreshCcw className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4 mr-2" />}
                     Reset System

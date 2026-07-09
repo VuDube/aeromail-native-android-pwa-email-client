@@ -3,7 +3,7 @@ import { ok, bad, notFound } from './core-utils';
 import { FolderType, Email, EmailThread, User } from "@shared/types";
 import { MOCK_USERS, MOCK_EMAILS } from "@shared/mock-data";
 export interface Env {
-  EMAIL_DB: D1Database;
+  EMAIL_DB?: D1Database; // Made optional for fallback check
   TOKENS: KVNamespace;
 }
 const SIMULATED_SENDERS = [
@@ -28,38 +28,46 @@ const SIMULATED_BODIES = [
   "Please click the button below to verify your email address and finish setting up your account."
 ];
 export function userRoutes(app: Hono<{ Bindings: Env }>) {
+  // Helper to check if DB is available
+  const getDB = (c: any) => c.env.EMAIL_DB;
+  app.get('/api/status', (c) => {
+    const db = getDB(c);
+    return ok(c, {
+      mode: db ? 'production' : 'mock',
+      storage: db ? 'Cloudflare D1' : 'In-Memory Fallback',
+      healthy: true
+    });
+  });
   app.get('/api/init', async (c) => {
+    const db = getDB(c);
+    if (!db) return ok(c, { initialized: true, message: "Running in Mock Mode (No D1 Binding Found)" });
     try {
-      const check = await c.env.EMAIL_DB.prepare("SELECT COUNT(*) as count FROM users").first<{count: number}>();
+      const check = await db.prepare("SELECT COUNT(*) as count FROM users").first<{count: number}>();
       if (check && check.count > 0) return ok(c, { initialized: true, message: "Already seeded" });
       const statements = [];
       for (const u of MOCK_USERS) {
-        statements.push(c.env.EMAIL_DB.prepare(
-          "INSERT INTO users (id, name, email, avatar_url) VALUES (?, ?, ?, ?)"
-        ).bind(u.id, u.name, u.email, u.avatarUrl || null));
+        statements.push(db.prepare("INSERT INTO users (id, name, email, avatar_url) VALUES (?, ?, ?, ?)").bind(u.id, u.name, u.email, u.avatarUrl || null));
       }
       for (const e of MOCK_EMAILS) {
-        statements.push(c.env.EMAIL_DB.prepare(
-          "INSERT OR IGNORE INTO threads (id, subject, last_message_at, snippet, unread_count, is_starred, folder) VALUES (?, ?, ?, ?, ?, ?, ?)"
-        ).bind(e.threadId, e.subject, e.timestamp, e.snippet, e.isRead ? 0 : 1, e.isStarred ? 1 : 0, e.folder));
-        statements.push(c.env.EMAIL_DB.prepare(
-          "INSERT INTO emails (id, thread_id, from_name, from_email, to_json, subject, body, snippet, timestamp, is_read, is_starred, folder) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
-        ).bind(e.id, e.threadId, e.from.name, e.from.email, JSON.stringify(e.to), e.subject, e.body, e.snippet, e.timestamp, e.isRead ? 1 : 0, e.isStarred ? 1 : 0, e.folder));
+        statements.push(db.prepare("INSERT OR IGNORE INTO threads (id, subject, last_message_at, snippet, unread_count, is_starred, folder) VALUES (?, ?, ?, ?, ?, ?, ?)").bind(e.threadId, e.subject, e.timestamp, e.snippet, e.isRead ? 0 : 1, e.isStarred ? 1 : 0, e.folder));
+        statements.push(db.prepare("INSERT INTO emails (id, thread_id, from_name, from_email, to_json, subject, body, snippet, timestamp, is_read, is_starred, folder) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").bind(e.id, e.threadId, e.from.name, e.from.email, JSON.stringify(e.to), e.subject, e.body, e.snippet, e.timestamp, e.isRead ? 1 : 0, e.isStarred ? 1 : 0, e.folder));
       }
-      await c.env.EMAIL_DB.batch(statements);
+      await db.batch(statements);
       return ok(c, { initialized: true });
     } catch (e) {
       return bad(c, 'Failed to initialize: ' + String(e));
     }
   });
   app.post('/api/init/reset', async (c) => {
+    const db = getDB(c);
+    if (!db) return bad(c, 'Reset failed: Database binding missing (Read-Only Mock Mode)');
     try {
-      await c.env.EMAIL_DB.batch([
-        c.env.EMAIL_DB.prepare("DELETE FROM emails"),
-        c.env.EMAIL_DB.prepare("DELETE FROM threads"),
-        c.env.EMAIL_DB.prepare("DELETE FROM users"),
-        c.env.EMAIL_DB.prepare("DELETE FROM domains"),
-        c.env.EMAIL_DB.prepare("DELETE FROM user_domains")
+      await db.batch([
+        db.prepare("DELETE FROM emails"),
+        db.prepare("DELETE FROM threads"),
+        db.prepare("DELETE FROM users"),
+        db.prepare("DELETE FROM domains"),
+        db.prepare("DELETE FROM user_domains")
       ]);
       return ok(c, { reset: true });
     } catch (e) {
@@ -67,6 +75,8 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
     }
   });
   app.post('/api/simulate/inbound', async (c) => {
+    const db = getDB(c);
+    if (!db) return bad(c, 'Simulation failed: Database binding missing (Read-Only Mock Mode)');
     try {
       const sender = SIMULATED_SENDERS[Math.floor(Math.random() * SIMULATED_SENDERS.length)];
       const subject = SIMULATED_SUBJECTS[Math.floor(Math.random() * SIMULATED_SUBJECTS.length)];
@@ -75,15 +85,9 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
       const threadId = crypto.randomUUID();
       const timestamp = Date.now();
       const snippet = body.slice(0, 100);
-      await c.env.EMAIL_DB.batch([
-        c.env.EMAIL_DB.prepare(`
-          INSERT INTO threads (id, subject, last_message_at, snippet, unread_count, is_starred, folder)
-          VALUES (?, ?, ?, ?, 1, 0, 'inbox')
-        `).bind(threadId, subject, timestamp, snippet),
-        c.env.EMAIL_DB.prepare(`
-          INSERT INTO emails (id, thread_id, from_name, from_email, to_json, subject, body, snippet, timestamp, is_read, is_starred, folder)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 'inbox')
-        `).bind(emailId, threadId, sender.name, sender.email, JSON.stringify([{ email: "user@aeromail.dev" }]), subject, body, snippet, timestamp)
+      await db.batch([
+        db.prepare("INSERT INTO threads (id, subject, last_message_at, snippet, unread_count, is_starred, folder) VALUES (?, ?, ?, ?, 1, 0, 'inbox')").bind(threadId, subject, timestamp, snippet),
+        db.prepare("INSERT INTO emails (id, thread_id, from_name, from_email, to_json, subject, body, snippet, timestamp, is_read, is_starred, folder) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 'inbox')").bind(emailId, threadId, sender.name, sender.email, JSON.stringify([{ email: "user@aeromail.dev" }]), subject, body, snippet, timestamp)
       ]);
       return ok(c, { id: emailId, threadId });
     } catch (e) {
@@ -91,16 +95,31 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
     }
   });
   app.get('/api/emails', async (c) => {
+    const db = getDB(c);
     const folder = (c.req.query('folder') as FolderType) || 'inbox';
     const limit = Math.min(Number(c.req.query('limit')) || 20, 100);
+    if (!db) {
+      // Mock Fallback Logic
+      const filtered = MOCK_EMAILS.filter(e => e.folder === folder || (folder === 'starred' && e.isStarred));
+      const threads: EmailThread[] = filtered.map(e => ({
+        id: e.threadId,
+        subject: e.subject,
+        lastMessageAt: e.timestamp,
+        snippet: e.snippet,
+        unreadCount: e.isRead ? 0 : 1,
+        isStarred: e.isStarred,
+        folder: e.folder,
+        participantNames: [e.from.name],
+        messages: [e]
+      }));
+      return ok(c, threads);
+    }
     try {
-      const { results } = await c.env.EMAIL_DB.prepare(
+      const { results } = await db.prepare(
         "SELECT * FROM threads WHERE folder = ? OR (? = 'starred' AND is_starred = 1) ORDER BY last_message_at DESC LIMIT ?"
       ).bind(folder, folder, limit).all<any>();
       const threads: EmailThread[] = await Promise.all(results.map(async (t) => {
-        const { results: messages } = await c.env.EMAIL_DB.prepare(
-          "SELECT * FROM emails WHERE thread_id = ? ORDER BY timestamp ASC"
-        ).bind(t.id).all<any>();
+        const { results: messages } = await db.prepare("SELECT * FROM emails WHERE thread_id = ? ORDER BY timestamp ASC").bind(t.id).all<any>();
         return {
           id: t.id,
           subject: t.subject,
@@ -131,12 +150,18 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
     }
   });
   app.get('/api/emails/:id', async (c) => {
+    const db = getDB(c);
     const id = c.req.param('id');
-    try {
-      const email = await c.env.EMAIL_DB.prepare("SELECT * FROM emails WHERE id = ?").bind(id).first<any>();
+    if (!db) {
+      const email = MOCK_EMAILS.find(e => e.id === id);
       if (!email) return notFound(c, 'Email not found');
-      const threadRecord = await c.env.EMAIL_DB.prepare("SELECT * FROM threads WHERE id = ?").bind(email.thread_id).first<any>();
-      const { results: allMsgs } = await c.env.EMAIL_DB.prepare("SELECT * FROM emails WHERE thread_id = ? ORDER BY timestamp ASC").bind(email.thread_id).all<any>();
+      return ok(c, { ...email, thread: { id: email.threadId, subject: email.subject, messages: [email], unreadCount: 0, isStarred: email.isStarred, folder: email.folder, lastMessageAt: email.timestamp, participantNames: [email.from.name] } });
+    }
+    try {
+      const email = await db.prepare("SELECT * FROM emails WHERE id = ?").bind(id).first<any>();
+      if (!email) return notFound(c, 'Email not found');
+      const threadRecord = await db.prepare("SELECT * FROM threads WHERE id = ?").bind(email.thread_id).first<any>();
+      const { results: allMsgs } = await db.prepare("SELECT * FROM emails WHERE thread_id = ? ORDER BY timestamp ASC").bind(email.thread_id).all<any>();
       const thread: EmailThread = {
         id: threadRecord.id,
         subject: threadRecord.subject,
@@ -166,10 +191,12 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
     }
   });
   app.patch('/api/emails/:id', async (c) => {
+    const db = getDB(c);
     const id = c.req.param('id');
     const updates = await c.req.json();
+    if (!db) return bad(c, 'Update failed: Database binding missing (Read-Only Mock Mode)');
     try {
-      const email = await c.env.EMAIL_DB.prepare("SELECT * FROM emails WHERE id = ?").bind(id).first<any>();
+      const email = await db.prepare("SELECT * FROM emails WHERE id = ?").bind(id).first<any>();
       if (!email) return notFound(c, 'Email not found');
       const setClauses: string[] = [];
       const params: any[] = [];
@@ -180,46 +207,29 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
       }
       params.push(id);
       if (setClauses.length > 0) {
-        await c.env.EMAIL_DB.prepare(`UPDATE emails SET ${setClauses.join(', ')} WHERE id = ?`).bind(...params).run();
-        const { results: msgs } = await c.env.EMAIL_DB.prepare("SELECT is_read, is_starred FROM emails WHERE thread_id = ?").bind(email.thread_id).all<any>();
+        await db.prepare(`UPDATE emails SET ${setClauses.join(', ')} WHERE id = ?`).bind(...params).run();
+        const { results: msgs } = await db.prepare("SELECT is_read, is_starred FROM emails WHERE thread_id = ?").bind(email.thread_id).all<any>();
         const unreadCount = msgs.filter(m => !m.is_read).length;
         const isStarred = msgs.some(m => m.is_starred) ? 1 : 0;
-        await c.env.EMAIL_DB.prepare("UPDATE threads SET unread_count = ?, is_starred = ? WHERE id = ?").bind(unreadCount, isStarred, email.thread_id).run();
+        await db.prepare("UPDATE threads SET unread_count = ?, is_starred = ? WHERE id = ?").bind(unreadCount, isStarred, email.thread_id).run();
       }
       return ok(c, { success: true });
     } catch (e) {
       return bad(c, 'Update failed');
     }
   });
-  app.post('/api/threads/:id/read', async (c) => {
-    const threadId = c.req.param('id');
-    try {
-      await c.env.EMAIL_DB.batch([
-        c.env.EMAIL_DB.prepare("UPDATE emails SET is_read = 1 WHERE thread_id = ?").bind(threadId),
-        c.env.EMAIL_DB.prepare("UPDATE threads SET unread_count = 0 WHERE id = ?").bind(threadId)
-      ]);
-      return ok(c, { success: true });
-    } catch (e) {
-      return bad(c, 'Batch update failed');
-    }
-  });
   app.post('/api/emails/send', async (c) => {
+    const db = getDB(c);
+    if (!db) return bad(c, 'Send failed: Database binding missing (Read-Only Mock Mode)');
     const { to, subject, body, threadId } = await c.req.json();
     const emailId = crypto.randomUUID();
     const targetThreadId = threadId || crypto.randomUUID();
     const timestamp = Date.now();
     const snippet = body.slice(0, 100);
     try {
-      await c.env.EMAIL_DB.batch([
-        c.env.EMAIL_DB.prepare(`
-          INSERT INTO threads (id, subject, last_message_at, snippet, unread_count, is_starred, folder)
-          VALUES (?, ?, ?, ?, 0, 0, 'sent')
-          ON CONFLICT(id) DO UPDATE SET last_message_at = excluded.last_message_at, snippet = excluded.snippet
-        `).bind(targetThreadId, subject, timestamp, snippet),
-        c.env.EMAIL_DB.prepare(`
-          INSERT INTO emails (id, thread_id, from_name, from_email, to_json, subject, body, snippet, timestamp, is_read, is_starred, folder)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0, 'sent')
-        `).bind(emailId, targetThreadId, "Current User", "user@aeromail.dev", JSON.stringify([{email: to}]), subject, body, snippet, timestamp)
+      await db.batch([
+        db.prepare("INSERT INTO threads (id, subject, last_message_at, snippet, unread_count, is_starred, folder) VALUES (?, ?, ?, ?, 0, 0, 'sent') ON CONFLICT(id) DO UPDATE SET last_message_at = excluded.last_message_at, snippet = excluded.snippet").bind(targetThreadId, subject, timestamp, snippet),
+        db.prepare("INSERT INTO emails (id, thread_id, from_name, from_email, to_json, subject, body, snippet, timestamp, is_read, is_starred, folder) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0, 'sent')").bind(emailId, targetThreadId, "Current User", "user@aeromail.dev", JSON.stringify([{email: to}]), subject, body, snippet, timestamp)
       ]);
       return ok(c, { id: emailId });
     } catch (e) {
@@ -227,10 +237,12 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
     }
   });
   app.get('/api/me', async (c) => {
+    const db = getDB(c);
+    if (!db) return ok(c, MOCK_USERS[0]);
     try {
-      const user = await c.env.EMAIL_DB.prepare("SELECT * FROM users LIMIT 1").first<any>();
+      const user = await db.prepare("SELECT * FROM users LIMIT 1").first<any>();
       if (!user) return ok(c, MOCK_USERS[0]);
-      return ok(c, { id: user.id, name: user.name, email: user.email, avatarUrl: user.avatar_url });
+      return ok(c, { id: user.id, name: user.name, email: user.email, avatar_url: user.avatar_url });
     } catch (e) {
       return ok(c, MOCK_USERS[0]);
     }
