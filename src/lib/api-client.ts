@@ -7,7 +7,6 @@ export class ApiRedirectError extends Error {
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const isAuthPath = path.startsWith('/api/auth/');
   const controller = new AbortController();
-  // Extended timeout for auth operations and domain lookups to avoid race conditions
   const timeoutMs = isAuthPath ? 45000 : 15000;
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -20,8 +19,8 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
       ...init
     });
     if (res.redirected) {
-      // Handle the redirect manually to ensure PWA doesn't lose context
-      window.location.href = res.url;
+      // Use replace to avoid polluting history in PWA standalone mode
+      window.location.replace(res.url);
       throw new ApiRedirectError(res.url);
     }
     const rawText = await res.text();
@@ -29,9 +28,12 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
     try {
       json = JSON.parse(rawText) as ApiResponse<T>;
     } catch (e) {
-      const text = rawText.toLowerCase();
-      if (text.includes('binding') || text.includes('db_error') || res.status === 500) {
-        throw new Error("Missing Infrastructure: D1 or KV storage not bound. Check your wrangler.jsonc or environment secrets.");
+      const text = rawText.toUpperCase();
+      if (text.includes('D1_') || text.includes('DATABASE') || text.includes('SQLITE') || res.status === 500) {
+        throw new Error("D1 Infrastructure Error: The database is not properly bound or initialized. Ensure 'EMAIL_DB' is present in wrangler.jsonc.");
+      }
+      if (text.includes('KV_') || text.includes('NAMESPACE')) {
+        throw new Error("KV Infrastructure Error: The 'TOKENS' namespace is not bound. Verify your worker configuration.");
       }
       throw new Error(`Server Error (${res.status}): Invalid response format from ${path}`);
     }
@@ -39,17 +41,13 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
       const errorMessage = json.error || `Request failed (${res.status})`;
       throw new Error(errorMessage);
     }
-    if (json.meta?.demo_mode) {
-      console.warn(`[AeroMail] Serving data in Demo Mode for ${path}`);
-    }
     return json.data!;
   } catch (e: any) {
-    if (e.name === 'AbortError') throw new Error("Request timed out.");
+    if (e.name === 'AbortError') throw new Error("Request timed out. The edge function took too long to respond.");
     if (e instanceof ApiRedirectError) throw e;
-    // Check for common developer mistakes and provide actionable advice
     if (e.message.includes('fetch')) {
       console.error("[NET ERROR]", e.message);
-      throw new Error("Connection failed. Check if the Worker is running.");
+      throw new Error("Network connection failed. Ensure the AeroMail Worker is deployed and reachable.");
     }
     console.error("[API ERROR]", e.message);
     throw e;

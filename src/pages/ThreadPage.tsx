@@ -36,9 +36,17 @@ export function ThreadPage() {
       method: 'PATCH',
       body: JSON.stringify({ isRead: true })
     }),
-    onSuccess: () => {
+    onSuccess: (_, threadId) => {
+      // Optimistic update for the specific thread cache
+      queryClient.setQueryData(['thread', threadId], (old: any) => {
+        if (!old?.thread) return old;
+        return {
+          ...old,
+          thread: { ...old.thread, unreadCount: 0 }
+        };
+      });
+      // Invalidate list to refresh unread badges elsewhere
       queryClient.invalidateQueries({ queryKey: ['threads'] });
-      queryClient.invalidateQueries({ queryKey: ['thread', id] });
     }
   });
   useEffect(() => {
@@ -46,7 +54,7 @@ export function ThreadPage() {
       markAttemptedRef.current = id;
       markAsRead.mutate(id);
     }
-  }, [id, thread, markAsRead]);
+  }, [id, thread?.unreadCount, markAsRead]);
   useEffect(() => {
     if (enabledDomains.length > 0 && selectedFrom === 'user@aeromail.dev') {
       setSelectedFrom(`hello@${enabledDomains[0].name}`);
@@ -101,10 +109,10 @@ export function ThreadPage() {
               <div className="max-w-4xl mx-auto px-4 md:px-8">
                 <AnimatePresence mode="wait">
                   {isReplying ? (
-                    <motion.div 
-                      initial={{ y: 20, opacity: 0 }} 
-                      animate={{ y: 0, opacity: 1 }} 
-                      exit={{ y: 20, opacity: 0 }} 
+                    <motion.div
+                      initial={{ y: 20, opacity: 0 }}
+                      animate={{ y: 0, opacity: 1 }}
+                      exit={{ y: 20, opacity: 0 }}
                       className="bg-surface-1 shadow-2xl rounded-m3-xl border border-primary/20 overflow-hidden flex flex-col"
                     >
                       <div className="px-8 py-4 border-b flex items-center justify-between bg-surface-2/50 shrink-0">
@@ -125,19 +133,19 @@ export function ThreadPage() {
                         <Button variant="ghost" size="icon" onClick={() => setIsReplying(false)} className="rounded-full"><ChevronDown className="h-5 w-5" /></Button>
                       </div>
                       <div className="p-8">
-                        <Textarea 
-                          autoFocus 
-                          value={replyBody} 
-                          onChange={(e) => setReplyBody(e.target.value)} 
-                          placeholder="Type your message..." 
-                          className="min-h-[150px] bg-transparent border-none focus-visible:ring-0 text-base p-0 resize-none shadow-none" 
+                        <Textarea
+                          autoFocus
+                          value={replyBody}
+                          onChange={(e) => setReplyBody(e.target.value)}
+                          placeholder="Type your message..."
+                          className="min-h-[150px] bg-transparent border-none focus-visible:ring-0 text-base p-0 resize-none shadow-none"
                         />
                       </div>
                       <div className="px-8 py-4 border-t flex items-center justify-end bg-surface-2/30 gap-4">
                         <Button variant="ghost" onClick={() => setIsReplying(false)} className="rounded-full font-bold">Discard</Button>
-                        <Button 
-                          onClick={() => sendReply.mutate(replyBody)} 
-                          disabled={!replyBody.trim() || sendReply.isPending} 
+                        <Button
+                          onClick={() => sendReply.mutate(replyBody)}
+                          disabled={!replyBody.trim() || sendReply.isPending}
                           className="rounded-full px-10 bg-primary text-white font-bold h-11"
                         >
                           {sendReply.isPending ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5 mr-2" />} Send
