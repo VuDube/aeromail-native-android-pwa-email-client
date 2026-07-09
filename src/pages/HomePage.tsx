@@ -5,7 +5,7 @@ import { api } from '@/lib/api-client';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { EmailThread, FolderType } from '@shared/types';
 import { format } from 'date-fns';
-import { Plus, Search, Star, Loader2, RefreshCw, Archive, MailOpen, Inbox as InboxIcon, Users } from 'lucide-react';
+import { Plus, Search, Star, Loader2, RefreshCw, Archive, MailOpen, Inbox as InboxIcon } from 'lucide-react';
 import { motion, AnimatePresence, useMotionValue, useTransform } from 'framer-motion';
 import { useSwipeable } from 'react-swipeable';
 import { Input } from '@/components/ui/input';
@@ -13,7 +13,7 @@ import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { useDensity } from '@/hooks/use-density';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 interface SwipeableThreadCardProps {
   thread: EmailThread;
   idx: number;
@@ -65,26 +65,23 @@ function SwipeableThreadCard({ thread, idx, density, onArchive, onToggleRead, on
         )}
       >
         <div className="shrink-0 pt-1 flex flex-col items-center gap-2">
-          <motion.div layoutId={`avatar-${thread.id}`}>
-            <Avatar className={cn(density === 'compact' ? "h-8 w-8" : "h-10 w-10")}>
-              <AvatarFallback className="bg-primary/10 text-primary text-xs">
-                {thread.participantNames[0]?.charAt(0) || 'A'}
-              </AvatarFallback>
-            </Avatar>
-          </motion.div>
-          <motion.button
-            whileTap={{ scale: 1.5 }}
+          <Avatar className={cn(density === 'compact' ? "h-8 w-8" : "h-10 w-10")}>
+            <AvatarFallback className="bg-primary/10 text-primary text-xs font-bold">
+              {thread.participantNames[0]?.charAt(0) || 'A'}
+            </AvatarFallback>
+          </Avatar>
+          <button
             onClick={(e) => {
               e.preventDefault(); e.stopPropagation();
               onToggleStar(latestMessageId, thread.isStarred);
             }}
-            className="z-20"
+            className="z-20 p-1"
           >
             <Star className={cn(
               "h-4 w-4 transition-all duration-200",
               thread.isStarred ? 'fill-yellow-500 text-yellow-500 scale-110' : 'text-surface-on-variant/30'
             )} />
-          </motion.button>
+          </button>
         </div>
         <Link to={`/thread/${latestMessageId}`} className="flex-1 min-w-0">
           <div className="flex items-center justify-between gap-2 mb-0.5">
@@ -154,49 +151,42 @@ export function HomePage() {
   const handleToggleStar = (id: string, current: boolean) => {
     toggleMutation.mutate({ id, updates: { isStarred: !current } });
   };
-  const simulateInbound = useMutation({
-    mutationFn: () => api('/api/simulation/inbound', { method: 'POST', body: JSON.stringify({ subject: `Refactored Thread: ${new Date().toLocaleTimeString()}` }) }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['threads'] });
-      toast.success('New conversation started');
-    }
-  });
   return (
     <AppLayout>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="py-4 md:py-6 lg:py-8 space-y-6">
-          <header className="flex flex-col gap-4">
+        <div className="py-8 md:py-10 lg:py-12 space-y-8">
+          <header className="flex flex-col gap-6">
             <div className="relative group">
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-surface-on-variant opacity-50 group-focus-within:opacity-100" />
               <Input
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search conversations"
-                className="w-full h-12 pl-12 pr-12 rounded-m3-xl bg-surface-2 border-none focus-visible:ring-primary transition-all shadow-sm"
+                className="w-full h-14 pl-12 pr-12 rounded-m3-xl bg-surface-2 border-none focus-visible:ring-primary transition-all shadow-sm"
               />
             </div>
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <h1 className="text-xl font-bold text-surface-on capitalize tracking-tight">
+              <div className="flex items-center gap-3">
+                <h1 className="text-2xl font-black text-surface-on capitalize tracking-tighter">
                   {searchQuery ? 'Search' : folder}
                 </h1>
-                {isFetching && <Loader2 className="h-4 w-4 animate-spin text-primary" />}
+                {isFetching && <Loader2 className="h-5 w-5 animate-spin text-primary" />}
               </div>
-              <div className="flex items-center gap-2">
-                <Button variant="ghost" size="sm" onClick={() => queryClient.invalidateQueries({ queryKey: ['threads'] })} className="h-8 w-8 p-0 rounded-full">
-                   <RefreshCw className="h-4 w-4" />
-                </Button>
-                <Button variant="outline" size="sm" onClick={() => simulateInbound.mutate()} className="h-8 text-xs rounded-full px-4 border-primary/20 text-primary">
-                  Simulate Relational Data
-                </Button>
-              </div>
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={() => queryClient.invalidateQueries({ queryKey: ['threads'] })} 
+                className="h-10 w-10 p-0 rounded-full bg-surface-1"
+              >
+                 <RefreshCw className="h-5 w-5" />
+              </Button>
             </div>
           </header>
           <section className="space-y-px">
             {isLoading ? (
-              <div className="flex flex-col items-center justify-center py-24 gap-4">
-                <Loader2 className="h-10 w-10 animate-spin text-primary" />
-                <p className="text-sm font-medium text-muted-foreground animate-pulse">Querying optimized index...</p>
+              <div className="flex flex-col items-center justify-center py-32 gap-6">
+                <Loader2 className="h-12 w-12 animate-spin text-primary opacity-20" />
+                <p className="text-sm font-bold text-muted-foreground tracking-widest uppercase animate-pulse">Relational Sync...</p>
               </div>
             ) : filteredThreads.length > 0 ? (
               <AnimatePresence mode="popLayout">
@@ -213,12 +203,14 @@ export function HomePage() {
                 ))}
               </AnimatePresence>
             ) : (
-              <div className="flex flex-col items-center justify-center py-32 text-center gap-6">
+              <div className="flex flex-col items-center justify-center py-40 text-center gap-8 bg-surface-1 rounded-m3-xl border-2 border-dashed border-surface-variant/30">
                 <div className="h-24 w-24 bg-surface-2 rounded-full flex items-center justify-center">
-                  <InboxIcon className="h-10 w-10 text-surface-on-variant/20" />
+                  <InboxIcon className="h-12 w-12 text-surface-on-variant/20" />
                 </div>
-                <h3 className="text-lg font-bold">Inbox Optimized</h3>
-                <p className="text-sm text-surface-on-variant/60 max-w-[200px]">No threads found in {folder}.</p>
+                <div className="space-y-2">
+                  <h3 className="text-xl font-black tracking-tight">Inbox Clean</h3>
+                  <p className="text-sm text-surface-on-variant/60 max-w-[240px]">No relational data found in {folder}.</p>
+                </div>
               </div>
             )}
           </section>
@@ -226,12 +218,12 @@ export function HomePage() {
       </div>
       <Link to="/compose">
         <motion.button
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
-          className="m3-fab shadow-xl shadow-primary/30"
+          whileHover={{ scale: 1.1, rotate: 90 }}
+          whileTap={{ scale: 0.9 }}
+          className="m3-fab shadow-2xl shadow-primary/40 bg-primary text-white"
           aria-label="Compose"
         >
-          <Plus className="h-6 w-6" />
+          <Plus className="h-8 w-8" />
         </motion.button>
       </Link>
     </AppLayout>

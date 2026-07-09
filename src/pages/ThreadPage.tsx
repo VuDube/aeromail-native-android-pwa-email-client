@@ -39,7 +39,7 @@ export function ThreadPage() {
     if (thread?.id && thread.unreadCount > 0) {
       markThreadAsRead.mutate(thread.id);
     }
-  }, [thread?.id, thread?.unreadCount]);
+  }, [thread?.id, thread?.unreadCount, markThreadAsRead]);
   const handleBack = useCallback(() => {
     if (window.history.length > 1) {
       navigate(-1);
@@ -58,6 +58,7 @@ export function ThreadPage() {
       setReplyBody('');
       setIsReplying(false);
       queryClient.invalidateQueries({ queryKey: ['email', id] });
+      queryClient.invalidateQueries({ queryKey: ['threads'] });
     },
   });
   if (isEmailLoading) {
