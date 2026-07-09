@@ -9,7 +9,9 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
     return ok(c, {
       mode: db ? 'production' : 'mock',
       storage: db ? 'Cloudflare D1' : 'In-Memory Fallback',
-      healthy: true
+      healthy: true,
+      version: '1.0.4-stable',
+      location: 'Edge'
     });
   });
   app.get('/api/init', async (c) => {
@@ -26,16 +28,31 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
       return bad(c, `Initialization failed: ${String(e)}`);
     }
   });
+  app.post('/api/init/reset', async (c) => {
+    const db = getDB(c);
+    if (!db) return ok(c, { success: true });
+    try {
+      await db.batch([
+        db.prepare("DELETE FROM emails"),
+        db.prepare("DELETE FROM threads"),
+        db.prepare("DELETE FROM users"),
+        db.prepare("INSERT INTO users (id, name, email) VALUES (?, ?, ?)").bind(MOCK_USERS[0].id, MOCK_USERS[0].name, MOCK_USERS[0].email)
+      ]);
+      return ok(c, { success: true });
+    } catch (e) {
+      return bad(c, `Reset failed: ${String(e)}`);
+    }
+  });
   app.get('/api/emails', async (c) => {
     const db = getDB(c);
     const folder = c.req.query('folder') || 'inbox';
-    if (!db) return ok(c, MOCK_EMAILS.filter(e => e.folder === folder).map(({ id, ...rest }) => ({ 
+    if (!db) return ok(c, MOCK_EMAILS.filter(e => e.folder === folder).map(({ id, ...rest }) => ({
       ...rest,
-      id: rest.threadId, 
-      lastMessageAt: rest.timestamp, 
-      participantNames: [rest.from.name], 
-      unreadCount: 0, 
-      messages: [{ ...rest, id }] 
+      id: rest.threadId,
+      lastMessageAt: rest.timestamp,
+      participantNames: [rest.from.name],
+      unreadCount: 0,
+      messages: [{ ...rest, id }]
     })));
     const { results } = await db.prepare("SELECT * FROM threads WHERE folder = ? OR (? = 'starred' AND is_starred = 1) ORDER BY last_message_at DESC").bind(folder, folder).all();
     const threads = await Promise.all(results.map(async (t: any) => {
@@ -84,7 +101,7 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
   app.post('/api/emails/send', async (c) => {
     const db = getDB(c);
     const { to, subject, body, threadId } = await c.req.json();
-    if (!db) return ok(c, { id: crypto.randomUUID(), success: true });
+    if (!db) return ok(c, { id: crypto.randomUUID(), success: true, mock: true });
     const id = crypto.randomUUID();
     const tid = threadId || crypto.randomUUID();
     const ts = Date.now();
@@ -99,8 +116,8 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
     if (!db) return ok(c, { success: true, mock: true });
     const threadId = crypto.randomUUID();
     const ts = Date.now();
-    const subject = "Urgent: Project Sync";
-    const body = "I've reviewed the latest design updates. Everything looks sharp and ready for deployment.";
+    const subject = "Project Sync Request";
+    const body = "I've reviewed the design tokens. The Material Design 3 surface elevations look correct.";
     await db.batch([
       db.prepare("INSERT INTO threads (id, subject, last_message_at, snippet, unread_count, folder) VALUES (?, ?, ?, ?, 1, 'inbox')").bind(threadId, subject, ts, body.slice(0, 50)),
       db.prepare("INSERT INTO emails (id, thread_id, from_name, from_email, to_json, subject, body, snippet, timestamp, folder) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'inbox')").bind(crypto.randomUUID(), threadId, "Alex Rivera", "alex@example.com", "[]", subject, body, body.slice(0, 50), ts, 'inbox')

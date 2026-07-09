@@ -1,37 +1,43 @@
 import { ApiResponse } from "../../shared/types"
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const controller = new AbortController();
-  const id = setTimeout(() => controller.abort(), 10000);
+  const timeoutId = setTimeout(() => controller.abort(), 12000);
   try {
     const res = await fetch(path, {
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
       signal: controller.signal,
       ...init
     });
-    const rawBody = await res.text();
+    const rawText = await res.text();
     let json: ApiResponse<T>;
     try {
-      json = JSON.parse(rawBody) as ApiResponse<T>;
+      json = JSON.parse(rawText) as ApiResponse<T>;
     } catch (e) {
-      if (rawBody.includes('Worker routes failed to load')) {
-        throw new Error("Worker Binding Missing: Please ensure 'EMAIL_DB' D1 database is created and bound in wrangler.jsonc.");
+      // Catch common Cloudflare Worker error pages/responses
+      if (rawText.toLowerCase().includes('worker routes failed') || rawText.includes('500 Internal Server Error')) {
+        throw new Error("Edge Configuration Error: Ensure the 'EMAIL_DB' D1 binding is added to your wrangler.jsonc file.");
       }
-      throw new Error(`Critical: Invalid server response (Status: ${res.status}).`);
+      throw new Error(`Critical: Invalid API response format (Status: ${res.status}).`);
     }
     if (!res.ok || !json.success || json.data === undefined) {
-      const errMsg = json.error || `Request failed with status ${res.status}`;
-      if (errMsg.toLowerCase().includes('binding')) {
-        throw new Error("Infrastructure Error: D1 Binding 'EMAIL_DB' not found. Run in local mock mode.");
+      const errMsg = json.error || `Server responded with ${res.status}`;
+      // Guide the user if they're trying to use features that require D1
+      if (errMsg.toLowerCase().includes('binding') || errMsg.toLowerCase().includes('d1')) {
+        throw new Error("Storage Unavailable: Feature requires a Cloudflare D1 binding. Running in mock fallback.");
       }
       throw new Error(errMsg);
     }
     return json.data;
   } catch (e: any) {
     if (e.name === 'AbortError') {
-      throw new Error("Request timed out. The edge network is experiencing high latency.");
+      throw new Error("Network latency is too high. Request timed out after 12s.");
     }
+    // Forward the error for the component to handle
     throw e;
   } finally {
-    clearTimeout(id);
+    clearTimeout(timeoutId);
   }
 }

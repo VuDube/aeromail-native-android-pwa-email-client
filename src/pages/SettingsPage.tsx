@@ -29,7 +29,8 @@ import {
   Wand2,
   Database,
   CloudOff,
-  AlertTriangle
+  AlertTriangle,
+  Cpu
 } from 'lucide-react';
 import { toast } from 'sonner';
 export function SettingsPage() {
@@ -49,28 +50,23 @@ export function SettingsPage() {
     mutationFn: () => api('/api/init/reset', { method: 'POST' }),
     onSuccess: () => {
       queryClient.invalidateQueries();
-      toast.success('System reset successfully');
+      toast.success('Factory reset completed');
+      setTimeout(() => window.location.href = '/', 1500);
     },
+    onError: (err: any) => {
+      toast.error('Reset failed: ' + err.message);
+    }
   });
   const simulateInbound = useMutation({
     mutationFn: () => api('/api/simulate/inbound', { method: 'POST' }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['threads'] });
-      toast.success('Incoming email simulated! Check your inbox.');
+      toast.success('Mock email received!');
     },
     onError: (err: any) => {
       toast.error('Simulation failed: ' + err.message);
     }
   });
-  const clearCache = () => {
-    if ('caches' in window) {
-      caches.keys().then((names) => {
-        for (const name of names) caches.delete(name);
-      });
-      toast.success('Application cache cleared');
-      setTimeout(() => window.location.reload(), 1000);
-    }
-  };
   return (
     <AppLayout>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -78,36 +74,34 @@ export function SettingsPage() {
           <header className="flex items-center justify-between">
             <div className="space-y-1">
               <h1 className="text-3xl font-bold text-surface-on tracking-tight">Settings</h1>
-              <p className="text-surface-on-variant">Configure your personal email experience</p>
+              <p className="text-surface-on-variant">System and personal preferences</p>
             </div>
             {status && (
-              <Badge variant={isMockMode ? "outline" : "secondary"} className={isMockMode ? "border-yellow-500/50 text-yellow-600 bg-yellow-50" : "bg-green-100 text-green-700"}>
-                {isMockMode ? <CloudOff className="h-3 w-3 mr-1" /> : <Database className="h-3 w-3 mr-1" />}
-                {isMockMode ? "Mock Mode" : "Production D1"}
+              <Badge variant={isMockMode ? "outline" : "secondary"} className={cn("h-7 px-3 rounded-full", isMockMode ? "border-yellow-500/50 text-yellow-700 bg-yellow-50" : "bg-green-100 text-green-700")}>
+                {isMockMode ? <CloudOff className="h-3 w-3 mr-1.5" /> : <Database className="h-3 w-3 mr-1.5" />}
+                {isMockMode ? "Mock Sandbox" : "Production D1"}
               </Badge>
             )}
           </header>
-          <div className="grid gap-8 max-w-4xl">
+          <div className="grid gap-8 max-w-4xl pb-40">
             {isMockMode && (
-              <section className="bg-yellow-50 border border-yellow-200 rounded-m3-lg p-6 flex gap-4">
+              <section className="bg-yellow-50 border border-yellow-200 rounded-m3-lg p-6 flex gap-4 animate-in fade-in slide-in-from-top-2 duration-500">
                 <AlertTriangle className="h-6 w-6 text-yellow-600 shrink-0" />
                 <div className="space-y-1">
-                  <p className="font-bold text-yellow-800">Database Binding Missing</p>
+                  <p className="font-bold text-yellow-800">Limited Capability</p>
                   <p className="text-sm text-yellow-700 leading-relaxed">
-                    AeroMail is currently running in **Mock Fallback Mode** because the Cloudflare D1 binding is not detected.
-                    Actions like "Simulate Email" and "Send" are disabled. Check your <code>wrangler.jsonc</code> configuration.
+                    D1 database binding <code className="bg-yellow-100 px-1 rounded">EMAIL_DB</code> was not found. Persistent actions like resetting or receiving emails are simulated in-memory and will not persist across reloads.
                   </p>
                 </div>
               </section>
             )}
-            {/* Identity */}
             <section className="space-y-4">
               <div className="flex items-center gap-2 text-primary font-bold">
                 <UserIcon className="h-5 w-5" /> Account
               </div>
               <Card className="rounded-m3-lg border-none bg-surface-1 shadow-sm">
                 <CardContent className="flex items-center gap-5 pt-6">
-                  <Avatar className="h-16 w-16 ring-4 ring-primary-container">
+                  <Avatar className="h-16 w-16 ring-4 ring-primary-container/30">
                     <AvatarImage src={`https://avatar.vercel.sh/${user?.email}`} />
                     <AvatarFallback className="bg-primary text-primary-foreground text-xl">
                       {user?.name?.charAt(0) || 'A'}
@@ -117,33 +111,31 @@ export function SettingsPage() {
                     <p className="text-lg font-bold">{user?.name || 'Aero User'}</p>
                     <p className="text-sm text-surface-on-variant">{user?.email}</p>
                     <p className="text-[10px] mt-1 inline-flex items-center gap-1 bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-bold uppercase tracking-wide">
-                      <ShieldCheck className="h-3 w-3" /> Verified Account
+                      <ShieldCheck className="h-3 w-3" /> Secure Edge Identity
                     </p>
                   </div>
                 </CardContent>
               </Card>
             </section>
-            {/* Preferences */}
             <section className="space-y-4">
               <div className="flex items-center gap-2 text-primary font-bold">
-                <Layout className="h-5 w-5" /> Appearance
+                <Layout className="h-5 w-5" /> Personalization
               </div>
               <Card className="rounded-m3-lg border-none bg-surface-1 shadow-sm overflow-hidden">
-                <CardContent className="p-0 divide-y divide-surface-variant/20">
+                <CardContent className="p-0 divide-y divide-surface-variant/10">
                   <div className="flex items-center justify-between p-6">
                     <div className="space-y-0.5">
-                      <Label className="text-base font-bold">Dark Theme</Label>
-                      <p className="text-xs text-surface-on-variant">Reduces eye strain in low light</p>
+                      <Label className="text-base font-bold">Night Mode</Label>
+                      <p className="text-xs text-surface-on-variant">Switch to high-contrast dark interface</p>
                     </div>
                     <div className="flex items-center gap-3">
-                      {isDark ? <Moon className="h-5 w-5" /> : <Sun className="h-5 w-5" />}
                       <Switch checked={isDark} onCheckedChange={toggleTheme} />
                     </div>
                   </div>
                   <div className="flex items-center justify-between p-6">
                     <div className="space-y-0.5">
-                      <Label className="text-base font-bold">Density</Label>
-                      <p className="text-xs text-surface-on-variant">Visible content density</p>
+                      <Label className="text-base font-bold">UI Density</Label>
+                      <p className="text-xs text-surface-on-variant">Compact shows 30% more content</p>
                     </div>
                     <ToggleGroup
                       type="single"
@@ -158,79 +150,70 @@ export function SettingsPage() {
                 </CardContent>
               </Card>
             </section>
-            {/* Simulation Tools */}
             <section className="space-y-4">
               <div className="flex items-center gap-2 text-primary font-bold">
-                <Wand2 className="h-5 w-5" /> Simulation Tools
+                <Wand2 className="h-5 w-5" /> Automation
               </div>
               <Card className="rounded-m3-lg border-none bg-surface-1 shadow-sm overflow-hidden">
                 <CardContent className="p-6 flex items-center justify-between">
                   <div className="space-y-0.5">
-                    <Label className="text-base font-bold">Inbound Simulation</Label>
-                    <p className="text-xs text-surface-on-variant">Trigger a realistic mock incoming email</p>
+                    <Label className="text-base font-bold">Inbound Traffic Mock</Label>
+                    <p className="text-xs text-surface-on-variant">Generate a sample incoming email thread</p>
                   </div>
                   <Button
                     onClick={() => simulateInbound.mutate()}
-                    disabled={simulateInbound.isPending || isMockMode}
+                    disabled={simulateInbound.isPending}
                     className="rounded-full gap-2 px-6 bg-primary-container text-primary-on-container hover:bg-primary/20"
                   >
                     {simulateInbound.isPending ? <RefreshCcw className="h-4 w-4 animate-spin" /> : <MailPlus className="h-4 w-4" />}
-                    Simulate Email
+                    Test Inbox
                   </Button>
                 </CardContent>
               </Card>
             </section>
-            {/* Help */}
             <section className="space-y-4">
               <div className="flex items-center gap-2 text-primary font-bold">
-                <HelpCircle className="h-5 w-5" /> Resources
+                <Cpu className="h-5 w-5" /> System Info
               </div>
-              <Link to="/docs" className="block">
-                <Card className="rounded-m3-lg border-none bg-primary/5 hover:bg-primary/10 transition-colors shadow-sm cursor-pointer group">
-                  <CardContent className="flex items-center justify-between p-6">
-                    <div className="flex items-center gap-4">
-                      <div className="h-10 w-10 rounded-full bg-primary/20 flex items-center justify-center text-primary">
-                        <BookOpen className="h-5 w-5" />
-                      </div>
-                      <div>
-                        <p className="font-bold text-primary">Developer Guide</p>
-                        <p className="text-xs text-surface-on-variant">Setup, PWA tips, and architecture</p>
-                      </div>
-                    </div>
-                    <ChevronRight className="h-5 w-5 text-primary group-hover:translate-x-1 transition-transform" />
-                  </CardContent>
-                </Card>
-              </Link>
+              <Card className="rounded-m3-lg border-none bg-surface-1 shadow-sm p-6">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <p className="text-[10px] uppercase font-black text-surface-on-variant tracking-widest">Version</p>
+                    <p className="font-bold">{status?.version || '0.0.0-dev'}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-[10px] uppercase font-black text-surface-on-variant tracking-widest">Region</p>
+                    <p className="font-bold">{status?.location || 'Local'}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-[10px] uppercase font-black text-surface-on-variant tracking-widest">Engine</p>
+                    <p className="font-bold">Cloudflare Workers</p>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-[10px] uppercase font-black text-surface-on-variant tracking-widest">Persistence</p>
+                    <p className="font-bold">{status?.storage || 'Memory'}</p>
+                  </div>
+                </div>
+              </Card>
             </section>
-            {/* Maintenance */}
-            <section className="space-y-4 pt-8 border-t border-surface-variant/20">
+            <section className="space-y-4 pt-8 border-t border-surface-variant/10">
               <div className="flex items-center gap-2 text-destructive font-bold">
-                <Monitor className="h-5 w-5" /> Maintenance
+                <Trash2 className="h-5 w-5" /> Danger Zone
               </div>
-              <div className="grid gap-4">
-                <div className="flex items-center justify-between p-4 rounded-m3-lg bg-surface-1">
-                  <div className="space-y-0.5">
-                    <p className="text-sm font-bold">Purge Cache</p>
-                    <p className="text-xs text-surface-on-variant">Force reload app assets</p>
-                  </div>
-                  <Button variant="outline" size="sm" onClick={clearCache} className="rounded-full">Clear Cache</Button>
+              <div className="flex items-center justify-between p-6 rounded-m3-lg bg-destructive/5 border border-destructive/10">
+                <div className="space-y-0.5">
+                  <p className="text-sm font-bold text-destructive">Wipe Database</p>
+                  <p className="text-xs text-surface-on-variant">Irreversibly delete all emails and threads</p>
                 </div>
-                <div className="flex items-center justify-between p-4 rounded-m3-lg bg-destructive/5 border border-destructive/10">
-                  <div className="space-y-0.5">
-                    <p className="text-sm font-bold text-destructive">Factory Reset</p>
-                    <p className="text-xs text-surface-on-variant">Destroys all D1 data and sessions</p>
-                  </div>
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    onClick={() => window.confirm('Reset all data?') && resetData.mutate()}
-                    className="rounded-full"
-                    disabled={resetData.isPending || isMockMode}
-                  >
-                    {resetData.isPending ? <RefreshCcw className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4 mr-2" />}
-                    Reset System
-                  </Button>
-                </div>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={() => window.confirm('This will delete all conversations permanently. Proceed?') && resetData.mutate()}
+                  className="rounded-full px-6"
+                  disabled={resetData.isPending || isMockMode}
+                >
+                  {resetData.isPending ? <RefreshCcw className="h-4 w-4 animate-spin" /> : "Factory Reset"}
+                </Button>
               </div>
             </section>
           </div>

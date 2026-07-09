@@ -4,7 +4,7 @@ import { useParams, Link } from 'react-router-dom';
 import { api } from '@/lib/api-client';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { EmailThread } from '@shared/types';
-import { format } from 'date-fns';
+import { format, isToday, isYesterday } from 'date-fns';
 import { Plus, Search, Star, Loader2, RefreshCw, Archive, MailOpen, Inbox as InboxIcon, Sparkles } from 'lucide-react';
 import { motion, AnimatePresence, useMotionValue, useTransform } from 'framer-motion';
 import { useSwipeable } from 'react-swipeable';
@@ -14,6 +14,12 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { useDensity } from '@/hooks/use-density';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+function smartFormatDate(timestamp: number) {
+  const date = new Date(timestamp);
+  if (isToday(date)) return format(date, 'HH:mm');
+  if (isYesterday(date)) return 'Yesterday';
+  return format(date, 'MMM d');
+}
 interface SwipeableThreadCardProps {
   thread: EmailThread;
   idx: number;
@@ -25,16 +31,16 @@ interface SwipeableThreadCardProps {
 const SwipeableThreadCard = forwardRef<HTMLDivElement, SwipeableThreadCardProps>(
   ({ thread, idx, density, onArchive, onToggleRead, onToggleStar }, ref) => {
     const x = useMotionValue(0);
-    const scale = useTransform(x, [-100, 0, 100], [0.95, 1, 0.95]);
+    const scale = useTransform(x, [-100, 0, 100], [0.98, 1, 0.98]);
     const opacity = useTransform(x, [-150, 0, 150], [0, 1, 0]);
     const isRead = thread.unreadCount === 0;
     const handlers = useSwipeable({
       onSwiping: (e) => {
         const threshold = 120;
         if (Math.abs(e.deltaX) >= threshold && Math.abs(x.get()) < threshold) {
-          if ('vibrate' in navigator) navigator.vibrate(10);
+          if ('vibrate' in navigator) navigator.vibrate(5);
         }
-        x.set(e.deltaX * 0.6);
+        x.set(e.deltaX * 0.5);
       },
       onSwipedLeft: (e) => {
         if (Math.abs(e.deltaX) > 120) onArchive(thread.id);
@@ -53,7 +59,7 @@ const SwipeableThreadCard = forwardRef<HTMLDivElement, SwipeableThreadCardProps>
         ref={ref}
         initial={{ opacity: 0, x: -10 }}
         animate={{ opacity: 1, x: 0 }}
-        transition={{ delay: Math.min(idx * 0.05, 0.5) }}
+        transition={{ delay: Math.min(idx * 0.03, 0.4) }}
         className="relative overflow-hidden mb-1 rounded-m3-lg group"
       >
         <div className="absolute inset-0 flex items-center justify-between px-8 z-0 pointer-events-none">
@@ -68,7 +74,7 @@ const SwipeableThreadCard = forwardRef<HTMLDivElement, SwipeableThreadCardProps>
           {...handlers}
           style={{ x, scale, opacity }}
           className={cn(
-            "relative z-10 flex items-start gap-4 transition-colors border-b border-surface-variant/10 cursor-pointer",
+            "relative z-10 flex items-start gap-4 transition-colors border-b border-surface-variant/5 cursor-pointer select-none",
             density === 'compact' ? "p-3" : "p-5",
             isRead ? 'bg-background hover:bg-surface-1' : 'bg-primary/5 hover:bg-primary/10 border-l-4 border-l-primary'
           )}
@@ -81,9 +87,9 @@ const SwipeableThreadCard = forwardRef<HTMLDivElement, SwipeableThreadCardProps>
             </Avatar>
             <button
               onClick={(e) => { e.preventDefault(); e.stopPropagation(); onToggleStar(thread.id, thread.isStarred); }}
-              className="p-1 rounded-full hover:bg-surface-variant/20 transition-colors"
+              className="p-1 rounded-full hover:bg-surface-variant/30 transition-colors"
             >
-              <Star className={cn("h-5 w-5", thread.isStarred ? 'fill-yellow-500 text-yellow-500' : 'text-surface-on-variant/30')} />
+              <Star className={cn("h-5 w-5 transition-transform active:scale-125", thread.isStarred ? 'fill-yellow-500 text-yellow-500' : 'text-surface-on-variant/30')} />
             </button>
           </div>
           <Link to={`/thread/${thread.id}`} className="flex-1 min-w-0">
@@ -92,7 +98,7 @@ const SwipeableThreadCard = forwardRef<HTMLDivElement, SwipeableThreadCardProps>
                 {thread.participantNames.join(', ')}
               </span>
               <span className="text-[11px] font-bold text-surface-on-variant opacity-60">
-                {format(thread.lastMessageAt, 'HH:mm')}
+                {smartFormatDate(thread.lastMessageAt)}
               </span>
             </div>
             <h3 className={cn("truncate text-sm font-bold tracking-tight mb-1", !isRead ? "text-surface-on" : "text-surface-on-variant/80")}>
@@ -134,6 +140,7 @@ export function HomePage() {
   });
   const handleRefresh = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: ['threads'] });
+    toast.success("Inbox updated");
   }, [queryClient]);
   return (
     <AppLayout>
@@ -154,7 +161,7 @@ export function HomePage() {
                 <h1 className="text-4xl font-black tracking-tighter capitalize">{folder}</h1>
                 {isFetching && <Loader2 className="h-5 w-5 animate-spin text-primary opacity-50" />}
               </div>
-              <Button variant="ghost" size="icon" onClick={handleRefresh} className="rounded-full bg-surface-1">
+              <Button variant="ghost" size="icon" onClick={handleRefresh} className="rounded-full bg-surface-1 hover:bg-surface-2 transition-colors">
                 <RefreshCw className="h-5 w-5" />
               </Button>
             </div>
@@ -163,7 +170,7 @@ export function HomePage() {
             {isLoading ? (
               <div className="py-40 flex flex-col items-center gap-6">
                 <Loader2 className="h-10 w-10 animate-spin text-primary/40" />
-                <p className="text-[10px] font-black uppercase tracking-[0.3em] opacity-40">Connecting...</p>
+                <p className="text-[10px] font-black uppercase tracking-[0.3em] opacity-40">Syncing Conversations...</p>
               </div>
             ) : filteredThreads.length > 0 ? (
               <AnimatePresence mode="popLayout">
@@ -175,7 +182,9 @@ export function HomePage() {
                     density={density}
                     onArchive={(id) => {
                       toggleMutation.mutate({ id, updates: { folder: 'trash' } });
-                      toast.info("Moved to trash");
+                      toast.info("Moved to trash", {
+                        action: { label: "Undo", onClick: () => toggleMutation.mutate({ id, updates: { folder: 'inbox' } }) }
+                      });
                     }}
                     onToggleRead={(id, cur) => {
                       toggleMutation.mutate({ id, updates: { isRead: !cur } });
@@ -187,16 +196,16 @@ export function HomePage() {
                 ))}
               </AnimatePresence>
             ) : (
-              <div className="py-32 flex flex-col items-center text-center gap-8 bg-surface-1/50 rounded-[32px] border-2 border-dashed border-surface-variant/10 mx-auto max-w-md">
+              <div className="py-32 flex flex-col items-center text-center gap-8 bg-surface-1/30 rounded-[48px] border-2 border-dashed border-surface-variant/10 mx-auto max-w-lg">
                 <div className="relative">
                   <div className="h-24 w-24 bg-primary-container/20 rounded-full flex items-center justify-center">
                     <InboxIcon className="h-12 w-12 text-primary/30" />
                   </div>
                   <Sparkles className="absolute -top-2 -right-2 h-6 w-6 text-primary animate-pulse" />
                 </div>
-                <div className="space-y-2">
-                  <h3 className="text-xl font-black">All Clear</h3>
-                  <p className="text-surface-on-variant text-sm px-10">Your inbox is empty. Enjoy the peace and quiet.</p>
+                <div className="space-y-2 px-8">
+                  <h3 className="text-2xl font-black">Everything caught up</h3>
+                  <p className="text-surface-on-variant text-sm max-w-xs mx-auto">No messages found in {folder}. Enjoy the clear space!</p>
                 </div>
               </div>
             )}
@@ -204,7 +213,12 @@ export function HomePage() {
         </div>
       </div>
       <Link to="/compose">
-        <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} className="m3-fab shadow-primary/30">
+        <motion.button 
+          whileHover={{ scale: 1.05 }} 
+          whileTap={{ scale: 0.95 }} 
+          className="m3-fab shadow-xl shadow-primary/30"
+          aria-label="Compose new email"
+        >
           <Plus className="h-10 w-10" />
         </motion.button>
       </Link>
