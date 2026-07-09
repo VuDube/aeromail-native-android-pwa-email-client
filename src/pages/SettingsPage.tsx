@@ -77,8 +77,8 @@ export function SettingsPage() {
         <div className="py-8 md:py-10 lg:py-12 space-y-10">
           <header className="flex items-center justify-between">
             <div className="space-y-1">
-              <h1 className="text-3xl font-bold text-on-surface tracking-tight">Settings</h1>
-              <p className="text-on-surface-variant">Configure your personal email experience</p>
+              <h1 className="text-3xl font-bold text-surface-on tracking-tight">Settings</h1>
+              <p className="text-surface-on-variant">Configure your personal email experience</p>
             </div>
             {status && (
               <Badge variant={isMockMode ? "outline" : "secondary"} className={isMockMode ? "border-yellow-500/50 text-yellow-600 bg-yellow-50" : "bg-green-100 text-green-700"}>
@@ -94,7 +94,7 @@ export function SettingsPage() {
                 <div className="space-y-1">
                   <p className="font-bold text-yellow-800">Database Binding Missing</p>
                   <p className="text-sm text-yellow-700 leading-relaxed">
-                    AeroMail is currently running in **Mock Fallback Mode** because the Cloudflare D1 binding is not detected. 
+                    AeroMail is currently running in **Mock Fallback Mode** because the Cloudflare D1 binding is not detected.
                     Actions like "Simulate Email" and "Send" are disabled. Check your <code>wrangler.jsonc</code> configuration.
                   </p>
                 </div>
@@ -109,13 +109,13 @@ export function SettingsPage() {
                 <CardContent className="flex items-center gap-5 pt-6">
                   <Avatar className="h-16 w-16 ring-4 ring-primary-container">
                     <AvatarImage src={`https://avatar.vercel.sh/${user?.email}`} />
-                    <AvatarFallback className="bg-primary text-on-primary text-xl">
+                    <AvatarFallback className="bg-primary text-primary-foreground text-xl">
                       {user?.name?.charAt(0) || 'A'}
                     </AvatarFallback>
                   </Avatar>
                   <div>
                     <p className="text-lg font-bold">{user?.name || 'Aero User'}</p>
-                    <p className="text-sm text-on-surface-variant">{user?.email}</p>
+                    <p className="text-sm text-surface-on-variant">{user?.email}</p>
                     <p className="text-[10px] mt-1 inline-flex items-center gap-1 bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-bold uppercase tracking-wide">
                       <ShieldCheck className="h-3 w-3" /> Verified Account
                     </p>
@@ -133,7 +133,7 @@ export function SettingsPage() {
                   <div className="flex items-center justify-between p-6">
                     <div className="space-y-0.5">
                       <Label className="text-base font-bold">Dark Theme</Label>
-                      <p className="text-xs text-on-surface-variant">Reduces eye strain in low light</p>
+                      <p className="text-xs text-surface-on-variant">Reduces eye strain in low light</p>
                     </div>
                     <div className="flex items-center gap-3">
                       {isDark ? <Moon className="h-5 w-5" /> : <Sun className="h-5 w-5" />}
@@ -143,7 +143,7 @@ export function SettingsPage() {
                   <div className="flex items-center justify-between p-6">
                     <div className="space-y-0.5">
                       <Label className="text-base font-bold">Density</Label>
-                      <p className="text-xs text-on-surface-variant">Visible content density</p>
+                      <p className="text-xs text-surface-on-variant">Visible content density</p>
                     </div>
                     <ToggleGroup
                       type="single"
@@ -151,8 +151,8 @@ export function SettingsPage() {
                       onValueChange={(val) => val && setDensity(val as any)}
                       className="bg-surface-2 p-1 rounded-full"
                     >
-                      <ToggleGroupItem value="comfortable" className="rounded-full px-4 text-xs font-bold data-[state=on]:bg-primary data-[state=on]:text-white">Comfortable</ToggleGroupItem>
-                      <ToggleGroupItem value="compact" className="rounded-full px-4 text-xs font-bold data-[state=on]:bg-primary data-[state=on]:text-white">Compact</ToggleGroupItem>
+                      <ToggleGroupItem value="comfortable" className="rounded-full px-4 text-xs font-bold data-[state=on]:bg-primary data-[state=on]:text-primary-foreground">Comfortable</ToggleGroupItem>
+                      <ToggleGroupItem value="compact" className="rounded-full px-4 text-xs font-bold data-[state=on]:bg-primary data-[state=on]:text-primary-foreground">Compact</ToggleGroupItem>
                     </ToggleGroup>
                   </div>
                 </CardContent>
@@ -167,7 +167,7 @@ export function SettingsPage() {
                 <CardContent className="p-6 flex items-center justify-between">
                   <div className="space-y-0.5">
                     <Label className="text-base font-bold">Inbound Simulation</Label>
-                    <p className="text-xs text-on-surface-variant">Trigger a realistic mock incoming email</p>
+                    <p className="text-xs text-surface-on-variant">Trigger a realistic mock incoming email</p>
                   </div>
                   <Button
                     onClick={() => simulateInbound.mutate()}
@@ -194,7 +194,7 @@ export function SettingsPage() {
                       </div>
                       <div>
                         <p className="font-bold text-primary">Developer Guide</p>
-                        <p className="text-xs text-on-surface-variant">Setup, PWA tips, and architecture</p>
+                        <p className="text-xs text-surface-on-variant">Setup, PWA tips, and architecture</p>
                       </div>
                     </div>
                     <ChevronRight className="h-5 w-5 text-primary group-hover:translate-x-1 transition-transform" />
@@ -211,14 +211,14 @@ export function SettingsPage() {
                 <div className="flex items-center justify-between p-4 rounded-m3-lg bg-surface-1">
                   <div className="space-y-0.5">
                     <p className="text-sm font-bold">Purge Cache</p>
-                    <p className="text-xs text-on-surface-variant">Force reload app assets</p>
+                    <p className="text-xs text-surface-on-variant">Force reload app assets</p>
                   </div>
                   <Button variant="outline" size="sm" onClick={clearCache} className="rounded-full">Clear Cache</Button>
                 </div>
                 <div className="flex items-center justify-between p-4 rounded-m3-lg bg-destructive/5 border border-destructive/10">
                   <div className="space-y-0.5">
                     <p className="text-sm font-bold text-destructive">Factory Reset</p>
-                    <p className="text-xs text-on-surface-variant">Destroys all D1 data and sessions</p>
+                    <p className="text-xs text-surface-on-variant">Destroys all D1 data and sessions</p>
                   </div>
                   <Button
                     variant="destructive"

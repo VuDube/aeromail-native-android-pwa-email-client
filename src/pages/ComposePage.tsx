@@ -23,7 +23,7 @@ export function ComposePage() {
   const [recipientInput, setRecipientInput] = useState('');
   const [recipients, setRecipients] = useState<string[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
-  const { register, handleSubmit, formState: { errors } } = useForm({
+  const { register, handleSubmit } = useForm({
     resolver: zodResolver(composeSchema),
     defaultValues: { subject: '', body: '' }
   });
@@ -52,8 +52,8 @@ export function ComposePage() {
     }
     sendEmail.mutate({ ...data, to: recipients[0] });
   };
-  const suggestions = MOCK_USERS.filter(u => 
-    u.email.toLowerCase().includes(recipientInput.toLowerCase()) || 
+  const suggestions = MOCK_USERS.filter(u =>
+    u.email.toLowerCase().includes(recipientInput.toLowerCase()) ||
     u.name.toLowerCase().includes(recipientInput.toLowerCase())
   ).slice(0, 3);
   return (
@@ -83,7 +83,7 @@ export function ComposePage() {
           <form className="flex-1 p-8 flex flex-col space-y-4 overflow-y-auto" onSubmit={handleSubmit(onSubmit)}>
             <div className="space-y-4 relative">
               <div className="flex flex-wrap items-center gap-2 border-b border-surface-variant/20 pb-2 min-h-[44px]">
-                <span className="text-[10px] font-black text-on-surface-variant uppercase tracking-widest w-8">To</span>
+                <span className="text-[10px] font-black text-surface-on-variant uppercase tracking-widest w-8">To</span>
                 {recipients.map(r => (
                   <span key={r} className="inline-flex items-center gap-1 bg-primary/10 text-primary px-3 py-1 rounded-full text-xs font-bold">
                     {r}
@@ -113,7 +113,7 @@ export function ComposePage() {
                           className="w-full text-left px-4 py-3 hover:bg-surface-1 transition-colors flex flex-col"
                         >
                           <span className="text-sm font-bold">{u.name}</span>
-                          <span className="text-[10px] text-on-surface-variant">{u.email}</span>
+                          <span className="text-[10px] text-surface-on-variant">{u.email}</span>
                         </button>
                       ))}
                     </div>
@@ -121,7 +121,7 @@ export function ComposePage() {
                 </div>
               </div>
               <div className="flex items-center border-b border-surface-variant/20 py-2">
-                <span className="text-[10px] font-black text-on-surface-variant uppercase tracking-widest w-8">Sub</span>
+                <span className="text-[10px] font-black text-surface-on-variant uppercase tracking-widest w-8">Sub</span>
                 <Input
                   {...register('subject')}
                   placeholder="Subject"
@@ -136,7 +136,7 @@ export function ComposePage() {
                 className="bg-transparent border-none shadow-none focus-visible:ring-0 text-base leading-relaxed h-full resize-none p-0"
               />
             </div>
-            <div className="flex items-center gap-3 p-4 bg-primary/5 rounded-2xl text-[10px] font-bold text-primary/60 border border-primary/5 uppercase tracking-widest">
+            <div className="flex items-center gap-3 p-4 bg-primary/5 rounded-2xl text-[10px] font-bold text-primary opacity-60 border border-primary/10 uppercase tracking-widest">
               <Info className="h-4 w-4" />
               Real-time synchronization active
             </div>

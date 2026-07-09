@@ -75,7 +75,7 @@ const SwipeableThreadCard = forwardRef<HTMLDivElement, SwipeableThreadCardProps>
         >
           <div className="shrink-0 flex flex-col items-center gap-3">
             <Avatar className={cn(density === 'compact' ? "h-10 w-10" : "h-12 w-12")}>
-              <AvatarFallback className="bg-primary-container text-on-primary-container font-black text-sm uppercase">
+              <AvatarFallback className="bg-primary-container text-primary-on-container font-black text-sm uppercase">
                 {thread.participantNames[0]?.charAt(0) || 'A'}
               </AvatarFallback>
             </Avatar>
@@ -83,22 +83,22 @@ const SwipeableThreadCard = forwardRef<HTMLDivElement, SwipeableThreadCardProps>
               onClick={(e) => { e.preventDefault(); e.stopPropagation(); onToggleStar(thread.id, thread.isStarred); }}
               className="p-1 rounded-full hover:bg-surface-variant/20 transition-colors"
             >
-              <Star className={cn("h-5 w-5", thread.isStarred ? 'fill-yellow-500 text-yellow-500' : 'text-on-surface-variant/30')} />
+              <Star className={cn("h-5 w-5", thread.isStarred ? 'fill-yellow-500 text-yellow-500' : 'text-surface-on-variant/30')} />
             </button>
           </div>
           <Link to={`/thread/${thread.id}`} className="flex-1 min-w-0">
             <div className="flex items-center justify-between mb-0.5">
-              <span className={cn("truncate text-sm tracking-tight", !isRead ? "font-black" : "font-bold text-on-surface-variant")}>
+              <span className={cn("truncate text-sm tracking-tight", !isRead ? "font-black" : "font-bold text-surface-on-variant")}>
                 {thread.participantNames.join(', ')}
               </span>
-              <span className="text-[11px] font-bold text-on-surface-variant opacity-60">
+              <span className="text-[11px] font-bold text-surface-on-variant opacity-60">
                 {format(thread.lastMessageAt, 'HH:mm')}
               </span>
             </div>
-            <h3 className={cn("truncate text-sm font-bold tracking-tight mb-1", !isRead ? "text-on-surface" : "text-on-surface-variant/80")}>
+            <h3 className={cn("truncate text-sm font-bold tracking-tight mb-1", !isRead ? "text-surface-on" : "text-surface-on-variant/80")}>
               {thread.subject}
             </h3>
-            <p className="text-xs text-on-surface-variant/60 line-clamp-1 leading-relaxed">
+            <p className="text-xs text-surface-on-variant/60 line-clamp-1 leading-relaxed">
               {thread.snippet}
             </p>
           </Link>
@@ -113,7 +113,7 @@ export function HomePage() {
   const { folder = 'inbox' } = useParams<{ folder: string }>();
   const [searchQuery, setSearchQuery] = useState('');
   const { density } = useDensity();
-  const { data: threads, isLoading, isFetching, error } = useQuery<EmailThread[]>({
+  const { data: threads, isLoading, isFetching } = useQuery<EmailThread[]>({
     queryKey: ['threads', folder],
     queryFn: () => api<EmailThread[]>(`/api/emails?folder=${folder}`),
   });
@@ -141,7 +141,7 @@ export function HomePage() {
         <div className="py-8 md:py-10 lg:py-12">
           <header className="space-y-6 mb-10">
             <div className="relative group">
-              <Search className="absolute left-5 top-1/2 -translate-y-1/2 h-5 w-5 text-on-surface-variant opacity-40 group-focus-within:text-primary transition-all" />
+              <Search className="absolute left-5 top-1/2 -translate-y-1/2 h-5 w-5 text-surface-on-variant opacity-40 group-focus-within:text-primary transition-all" />
               <Input
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
@@ -196,7 +196,7 @@ export function HomePage() {
                 </div>
                 <div className="space-y-2">
                   <h3 className="text-xl font-black">All Clear</h3>
-                  <p className="text-on-surface-variant text-sm px-10">Your inbox is empty. Enjoy the peace and quiet.</p>
+                  <p className="text-surface-on-variant text-sm px-10">Your inbox is empty. Enjoy the peace and quiet.</p>
                 </div>
               </div>
             )}

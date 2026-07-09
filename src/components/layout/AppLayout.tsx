@@ -77,7 +77,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                       to={item.path}
                       className={cn(
                         "flex items-center gap-4 px-4 py-3 rounded-full transition-all group relative",
-                        isActive(item) ? "text-primary font-black" : "text-on-surface-variant hover:bg-surface-2"
+                        isActive(item) ? "text-primary font-black" : "text-surface-on-variant hover:bg-surface-2"
                       )}
                     >
                       {isActive(item) && (
@@ -105,7 +105,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                     to="/settings"
                     className={cn(
                       "flex items-center gap-4 px-4 py-3 rounded-full transition-all group relative",
-                      pathname === "/settings" ? "text-primary font-black" : "text-on-surface-variant hover:bg-surface-2"
+                      pathname === "/settings" ? "text-primary font-black" : "text-surface-on-variant hover:bg-surface-2"
                     )}
                   >
                     {pathname === "/settings" && (
@@ -157,7 +157,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                 animate={{ scale: 1, opacity: 1 }}
                 exit={{ scale: 0, opacity: 0 }}
                 onClick={() => document.getElementById("main-scroll-area")?.scrollTo({ top: 0, behavior: 'smooth' })}
-                className="fixed bottom-24 right-8 h-12 w-12 rounded-2xl bg-surface-variant text-on-surface-variant shadow-lg z-40 flex items-center justify-center hover:bg-primary hover:text-white transition-colors"
+                className="fixed bottom-24 right-8 h-12 w-12 rounded-2xl bg-surface-variant text-surface-on-variant shadow-lg z-40 flex items-center justify-center hover:bg-primary hover:text-white transition-colors"
               >
                 <ArrowUp className="h-6 w-6" />
               </motion.button>
@@ -172,7 +172,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                 to={item.path}
                 className={cn(
                   "flex flex-col items-center justify-center gap-1 relative w-16 transition-all",
-                  isActive(item) ? "text-primary" : "text-on-surface-variant opacity-60"
+                  isActive(item) ? "text-primary" : "text-surface-on-variant opacity-60"
                 )}
               >
                 {isActive(item) && (

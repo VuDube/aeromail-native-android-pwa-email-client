@@ -77,13 +77,13 @@
   @apply fixed bottom-8 right-8 h-16 w-16 rounded-[28px] bg-primary text-primary-foreground shadow-2xl flex items-center justify-center transition-all duration-300 hover:scale-110 active:scale-90 z-30 ease-m3-standard;
 }
 .prose-email {
-  @apply text-on-surface leading-relaxed max-w-none whitespace-pre-wrap font-sans text-base;
+  @apply text-surface-on leading-relaxed max-w-none whitespace-pre-wrap font-sans text-base;
 }
 .density-compact .prose-email {
   @apply text-sm leading-snug;
 }
 .m3-chip {
-  @apply inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-secondary-container/80 text-on-secondary-container text-xs font-bold transition-all hover:bg-secondary-container active:scale-95;
+  @apply inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-secondary-container/80 text-secondary-on-container text-xs font-bold transition-all hover:bg-secondary-container active:scale-95;
 }
 .custom-scrollbar {
   scrollbar-width: thin;

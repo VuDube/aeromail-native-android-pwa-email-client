@@ -29,17 +29,24 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
   app.get('/api/emails', async (c) => {
     const db = getDB(c);
     const folder = c.req.query('folder') || 'inbox';
-    if (!db) return ok(c, MOCK_EMAILS.filter(e => e.folder === folder).map(e => ({ id: e.threadId, ...e, lastMessageAt: e.timestamp, participantNames: [e.from.name], unreadCount: 0, messages: [e] })));
+    if (!db) return ok(c, MOCK_EMAILS.filter(e => e.folder === folder).map(({ id, ...rest }) => ({ 
+      ...rest,
+      id: rest.threadId, 
+      lastMessageAt: rest.timestamp, 
+      participantNames: [rest.from.name], 
+      unreadCount: 0, 
+      messages: [{ ...rest, id }] 
+    })));
     const { results } = await db.prepare("SELECT * FROM threads WHERE folder = ? OR (? = 'starred' AND is_starred = 1) ORDER BY last_message_at DESC").bind(folder, folder).all();
     const threads = await Promise.all(results.map(async (t: any) => {
       const msgs = await db.prepare("SELECT * FROM emails WHERE thread_id = ? ORDER BY timestamp ASC").bind(t.id).all();
-      return { 
-        ...t, 
-        lastMessageAt: t.last_message_at, 
-        unreadCount: t.unread_count, 
-        isStarred: !!t.is_starred, 
-        participantNames: Array.from(new Set(msgs.results.map((m: any) => m.from_name))), 
-        messages: msgs.results.map((m: any) => ({ ...m, from: { name: m.from_name, email: m.from_email }, to: JSON.parse(m.to_json) })) 
+      return {
+        ...t,
+        lastMessageAt: t.last_message_at,
+        unreadCount: t.unread_count,
+        isStarred: !!t.is_starred,
+        participantNames: Array.from(new Set(msgs.results.map((m: any) => m.from_name))),
+        messages: msgs.results.map((m: any) => ({ ...m, from: { name: m.from_name, email: m.from_email }, to: JSON.parse(m.to_json) }))
       };
     }));
     return ok(c, threads);
@@ -55,12 +62,12 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
     const threadRecord = await db.prepare("SELECT * FROM threads WHERE id = ?").bind(id).first() as any;
     if (!threadRecord) return notFound(c);
     const msgs = await db.prepare("SELECT * FROM emails WHERE thread_id = ? ORDER BY timestamp ASC").bind(id).all();
-    const thread = { 
-      ...threadRecord, 
-      lastMessageAt: threadRecord.last_message_at, 
-      isStarred: !!threadRecord.is_starred, 
-      unreadCount: threadRecord.unread_count, 
-      messages: msgs.results.map((m: any) => ({ ...m, from: { name: m.from_name, email: m.from_email }, to: JSON.parse(m.to_json) })) 
+    const thread = {
+      ...threadRecord,
+      lastMessageAt: threadRecord.last_message_at,
+      isStarred: !!threadRecord.is_starred,
+      unreadCount: threadRecord.unread_count,
+      messages: msgs.results.map((m: any) => ({ ...m, from: { name: m.from_name, email: m.from_email }, to: JSON.parse(m.to_json) }))
     };
     return ok(c, { ...thread.messages[thread.messages.length - 1], thread });
   });

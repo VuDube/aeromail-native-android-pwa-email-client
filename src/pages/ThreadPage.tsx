@@ -34,19 +34,19 @@ const MessageCard = memo(({ msg, isLatest, isSameSenderAsPrev }: { msg: Email, i
           </Avatar>
           <div className="flex-1 min-w-0">
             <div className="flex items-center justify-between">
-              <span className="font-bold text-on-surface">{msg.from.name}</span>
-              <span className="text-[10px] text-on-surface-variant font-bold opacity-60 uppercase tracking-tighter">
+              <span className="font-bold text-surface-on">{msg.from.name}</span>
+              <span className="text-[10px] text-surface-on-variant font-bold opacity-60 uppercase tracking-tighter">
                 {format(msg.timestamp, 'MMM d, h:mm a')}
               </span>
             </div>
-            <p className="text-[10px] text-on-surface-variant opacity-40 font-bold truncate">
+            <p className="text-[10px] text-surface-on-variant opacity-40 font-bold truncate">
               {msg.from.email}
             </p>
           </div>
         </div>
       )}
       <div
-        className="prose-email text-on-surface text-sm leading-relaxed"
+        className="prose-email text-surface-on text-sm leading-relaxed"
         dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(msg.body) }}
       />
     </motion.div>
@@ -59,30 +59,30 @@ export function ThreadPage() {
   const queryClient = useQueryClient();
   const [replyBody, setReplyBody] = React.useState('');
   const [isReplying, setIsReplying] = React.useState(false);
-  const { data: threadData, isLoading } = useQuery<Email & { thread: EmailThread }>({
+  const { data: threadData, isLoading } = useQuery<Email & { thread: EmailThread }>(({
     queryKey: ['thread', id],
     queryFn: () => api<Email & { thread: EmailThread }>(`/api/threads/${id}`),
     enabled: !!id,
-  });
+  }));
   const thread = threadData?.thread;
   const messages = thread?.messages || [];
-  const markAsRead = useMutation({
+  const markAsRead = useMutation(({
     mutationFn: (tid: string) => api(`/api/threads/${tid}`, { method: 'PATCH', body: JSON.stringify({ isRead: true }) }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['threads'] });
       queryClient.invalidateQueries({ queryKey: ['thread', id] });
     },
-  });
+  }));
   useEffect(() => {
     if (thread?.id && thread.unreadCount > 0) {
       markAsRead.mutate(thread.id);
     }
-  }, [thread?.id, thread?.unreadCount]);
-  const sendReply = useMutation({
+  }, [thread?.id, thread?.unreadCount, markAsRead]);
+  const sendReply = useMutation(({
     mutationFn: (body: string) => api('/api/emails/send', {
       method: 'POST',
       body: JSON.stringify({
-        to: messages[messages.length - 1].from.email,
+        to: messages[messages.length - 1]?.from.email,
         subject: `Re: ${thread?.subject}`,
         body,
         threadId: thread?.id
@@ -94,7 +94,7 @@ export function ThreadPage() {
       setIsReplying(false);
       queryClient.invalidateQueries({ queryKey: ['thread', id] });
     },
-  });
+  }));
   if (isLoading) return (
     <AppLayout>
       <div className="flex h-full items-center justify-center py-40">
