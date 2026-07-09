@@ -19,9 +19,9 @@ export function ThreadPage() {
   const [isReplying, setIsReplying] = useState(false);
   const [selectedFrom, setSelectedFrom] = useState('user@aeromail.dev');
   const markAttemptedRef = useRef<string | null>(null);
-  const { data: domains } = useQuery({ 
-    queryKey: ['domains'], 
-    queryFn: () => api<DomainInfo[]>('/api/domains') 
+  const { data: domains } = useQuery({
+    queryKey: ['domains'],
+    queryFn: () => api<DomainInfo[]>('/api/domains')
   });
   const enabledDomains = useMemo(() => domains?.filter(d => d.localEnabled) || [], [domains]);
   const { data: threadData, isLoading } = useQuery<{ thread: EmailThread }>({
@@ -32,10 +32,12 @@ export function ThreadPage() {
   const thread = threadData?.thread;
   const messages = thread?.messages || [];
   const markAsRead = useMutation({
-    mutationFn: (threadId: string) => api(`/api/threads/${threadId}`, { method: 'PATCH', body: JSON.stringify({ isRead: true }) }),
+    mutationFn: (threadId: string) => api(`/api/threads/${threadId}`, { 
+      method: 'PATCH', 
+      body: JSON.stringify({ isRead: true }) 
+    }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['threads'] });
-      queryClient.invalidateQueries({ queryKey: ['thread', id] });
     }
   });
   useEffect(() => {

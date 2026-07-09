@@ -32,22 +32,35 @@ export function SettingsPage() {
   const { density, setDensity } = useDensity();
   const queryClient = useQueryClient();
   const [searchParams] = useSearchParams();
-  const { data: status } = useQuery({ queryKey: ['status'], queryFn: () => api<any>('/api/status') });
-  const { data: authStatus, isLoading: isAuthLoading } = useQuery({ queryKey: ['auth-status'], queryFn: () => api<{ connected: boolean }>('/api/auth/status') });
-  const { data: domains, isLoading: isDomainsLoading, refetch: refetchDomains } = useQuery({ 
-    queryKey: ['domains'], 
-    queryFn: () => api<DomainInfo[]>('/api/domains'),
-    enabled: !!status?.cf_token_ready 
+  const { data: status } = useQuery({ 
+    queryKey: ['status'], 
+    queryFn: () => api<any>('/api/status') 
+  });
+  const { data: authStatus, isLoading: isAuthLoading } = useQuery({ 
+    queryKey: ['auth-status'], 
+    queryFn: () => api<{ connected: boolean }>('/api/auth/status') 
+  });
+  const { data: domains, isLoading: isDomainsLoading, refetch: refetchDomains } = useQuery({
+    queryKey: ['domains'],
+    queryFn: () => api<DomainInfo[]>('/api/domains')
   });
   const toggleDomain = useMutation({
-    mutationFn: (vars: { id: string, name: string, enabled: boolean }) => api('/api/domains/toggle', { method: 'POST', body: JSON.stringify({ domainId: vars.id, domainName: vars.name, enabled: vars.enabled }) }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['domains'] })
+    mutationFn: (vars: { id: string, name: string, enabled: boolean }) => 
+      api('/api/domains/toggle', { 
+        method: 'POST', 
+        body: JSON.stringify({ domainId: vars.id, domainName: vars.name, enabled: vars.enabled }) 
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['domains'] });
+      toast.success("Domain settings updated");
+    }
   });
   const disconnectMutation = useMutation({
     mutationFn: () => api('/api/auth/disconnect', { method: 'POST' }),
     onSuccess: () => {
       toast.success("Disconnected from Google");
       queryClient.invalidateQueries({ queryKey: ['auth-status'] });
+      queryClient.invalidateQueries({ queryKey: ['status'] });
     }
   });
   const simulateMutation = useMutation({
@@ -56,7 +69,7 @@ export function SettingsPage() {
       toast.success("Mock email injected into Inbox");
       queryClient.invalidateQueries({ queryKey: ['threads'] });
     },
-    onError: () => toast.error("Simulation failed")
+    onError: (err: any) => toast.error(err.message || "Simulation failed")
   });
   useEffect(() => {
     if (searchParams.get('auth') === 'success') {
@@ -86,8 +99,8 @@ export function SettingsPage() {
                   <CardDescription>Test the end-to-end routing flow without actual SMTP traffic.</CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <Button 
-                    onClick={() => simulateMutation.mutate()} 
+                  <Button
+                    onClick={() => simulateMutation.mutate()}
                     disabled={simulateMutation.isPending}
                     className="w-full rounded-full bg-primary text-white font-bold h-12 shadow-lg shadow-primary/20 gap-3"
                   >
@@ -101,7 +114,7 @@ export function SettingsPage() {
             <section className="space-y-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2 text-primary font-black uppercase tracking-widest text-xs">
-                  <ShieldCheck className="h-4 w-4" /> Cloudflare Domains
+                  <ShieldCheck className="h-4 w-4" /> Domain Management
                 </div>
                 <Button variant="ghost" size="sm" onClick={() => refetchDomains()} className="h-8 gap-2 font-bold text-xs">
                   <RefreshCw className={cn("h-3 w-3", isDomainsLoading && "animate-spin")} /> Refresh
@@ -109,20 +122,19 @@ export function SettingsPage() {
               </div>
               <Card className="rounded-m3-xl border-none bg-surface-1 shadow-sm overflow-hidden">
                 <CardHeader>
-                  <CardTitle className="text-lg font-bold">Domain Management</CardTitle>
-                  <CardDescription>Discover and enable domains from your Cloudflare account.</CardDescription>
+                  <CardTitle className="text-lg font-bold">Enabled Identities</CardTitle>
+                  <CardDescription>Activate domains to use them for sending and receiving.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  {!status?.cf_token_ready ? (
+                  {isDomainsLoading ? (
+                    <div className="py-10 flex justify-center"><Loader2 className="animate-spin text-primary/20" /></div>
+                  ) : domains?.length === 0 ? (
                     <div className="p-6 bg-surface-2 rounded-2xl border-2 border-dashed border-surface-variant/20 text-center space-y-4">
                       <Globe className="h-10 w-10 mx-auto text-surface-on-variant/20" />
                       <div className="space-y-1">
-                        <p className="font-bold">Cloudflare API Token Required</p>
-                        <p className="text-sm text-surface-on-variant">Set CF_API_TOKEN to discover your zones and routing status.</p>
+                        <p className="font-bold">No Domains Discovered</p>
+                        <p className="text-sm text-surface-on-variant">Persistence (D1) required to track domains.</p>
                       </div>
-                      <Button variant="outline" asChild className="rounded-full font-bold">
-                        <Link to="/docs">Setup Guide</Link>
-                      </Button>
                     </div>
                   ) : (
                     <div className="divide-y divide-surface-variant/10">
@@ -182,9 +194,9 @@ export function SettingsPage() {
                       </div>
                     </div>
                     {isAuthLoading ? <Loader2 className="h-5 w-5 animate-spin text-primary" /> : authStatus?.connected ? (
-                      <Button 
-                        variant="ghost" 
-                        onClick={() => disconnectMutation.mutate()} 
+                      <Button
+                        variant="ghost"
+                        onClick={() => disconnectMutation.mutate()}
                         disabled={disconnectMutation.isPending}
                         className="rounded-full text-destructive font-bold"
                       >

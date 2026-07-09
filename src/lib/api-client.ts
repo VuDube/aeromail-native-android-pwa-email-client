@@ -5,8 +5,11 @@ export class ApiRedirectError extends Error {
   }
 }
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {
+  const isAuthPath = path.startsWith('/api/auth/');
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 15000);
+  // Extended timeout for auth operations to avoid race conditions with redirects
+  const timeoutMs = isAuthPath ? 30000 : 15000;
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const res = await fetch(path, {
       headers: {
@@ -27,7 +30,7 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
     } catch (e) {
       const text = rawText.toLowerCase();
       if (text.includes('binding') || text.includes('db_error') || res.status === 500) {
-        throw new Error("Missing Infrastructure: D1 or KV storage not bound. Check your wrangler.jsonc.");
+        throw new Error("Missing Infrastructure: D1 or KV storage not bound. Check your wrangler.jsonc or environment secrets.");
       }
       throw new Error(`Server Error (${res.status}): Invalid response format.`);
     }
