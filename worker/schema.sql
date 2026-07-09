@@ -1,14 +1,13 @@
--- AeroMail Production Schema for Cloudflare D1
--- IDEMPOTENCY: All statements use IF NOT EXISTS to prevent migration collisions
--- EXECUTION: wrangler d1 execute aeromail-db --file=./worker/schema.sql
--- 1. Users Table
+-- AeroMail Production Relational Schema
+-- Optimized for Cloudflare D1
+-- 1. Identity & Profile
 CREATE TABLE IF NOT EXISTS users (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
   email TEXT UNIQUE NOT NULL,
   avatar_url TEXT
 );
--- 2. Threads Table (Aggregated conversation metadata)
+-- 2. Message Threads (Conversation Metadata)
 CREATE TABLE IF NOT EXISTS threads (
   id TEXT PRIMARY KEY,
   subject TEXT NOT NULL,
@@ -18,15 +17,15 @@ CREATE TABLE IF NOT EXISTS threads (
   is_starred INTEGER DEFAULT 0,
   folder TEXT NOT NULL
 );
--- 3. Emails Table (Individual messages)
+-- 3. Individual Emails
 CREATE TABLE IF NOT EXISTS emails (
   id TEXT PRIMARY KEY,
   thread_id TEXT NOT NULL,
   from_name TEXT NOT NULL,
   from_email TEXT NOT NULL,
-  to_json TEXT NOT NULL, -- JSON array of recipients
+  to_json TEXT NOT NULL, -- JSON formatted recipient list
   subject TEXT NOT NULL,
-  body TEXT NOT NULL,
+  body TEXT NOT NULL,    -- Using TEXT for unlimited MIME body storage
   snippet TEXT,
   timestamp INTEGER NOT NULL,
   is_read INTEGER DEFAULT 0,
@@ -34,7 +33,7 @@ CREATE TABLE IF NOT EXISTS emails (
   folder TEXT NOT NULL,
   FOREIGN KEY (thread_id) REFERENCES threads(id) ON DELETE CASCADE
 );
--- 4. Infrastructure Management
+-- 4. Multi-Domain Infrastructure
 CREATE TABLE IF NOT EXISTS domains (
   id TEXT PRIMARY KEY,
   domain_name TEXT UNIQUE NOT NULL,
@@ -49,13 +48,7 @@ CREATE TABLE IF NOT EXISTS user_domains (
   FOREIGN KEY (user_id) REFERENCES users(id),
   FOREIGN KEY (domain_id) REFERENCES domains(id)
 );
--- 5. Application Metadata (Configuration persistence)
-CREATE TABLE IF NOT EXISTS app_metadata (
-  key TEXT PRIMARY KEY,
-  value TEXT NOT NULL,
-  updated_at INTEGER NOT NULL
-);
--- 6. Performance Indices
+-- 5. Global Indices for High-Performance Reads
 CREATE INDEX IF NOT EXISTS idx_emails_thread ON emails(thread_id);
 CREATE INDEX IF NOT EXISTS idx_emails_folder_ts ON emails(folder, timestamp DESC);
 CREATE INDEX IF NOT EXISTS idx_threads_folder_ts ON threads(folder, last_message_at DESC);
