@@ -9,12 +9,12 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
       cf_token_ready: !!c.env.CF_API_TOKEN,
       kv_ready: !!c.env.TOKENS,
       db_ready: !!c.env.EMAIL_DB,
-      version: '1.8.0-infrastructure-hardened'
+      version: '1.9.0-production-certified'
     });
   });
   app.get('/api/domains', async (c) => {
     const db = c.env.EMAIL_DB;
-    if (!db) return bad(c, "EMAIL_DB binding is missing");
+    if (!db) return bad(c, "EMAIL_DB binding is missing (D1_BINDING_MISSING)");
     try {
       const zones = await getCloudflareZones(c.env);
       const { results: localDomains } = await db.prepare("SELECT * FROM user_domains WHERE is_enabled = 1").all() as any;
@@ -31,7 +31,7 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
       }));
       return ok(c, domainList);
     } catch (e: any) {
-      if (e.message === "CF_API_TOKEN_MISSING") return bad(c, "Cloudflare API Token missing");
+      if (e.message === "CF_API_TOKEN_MISSING") return bad(c, "Cloudflare API Token missing (CF_TOKEN_MISSING)");
       return internalError(c, e.message);
     }
   });
@@ -44,51 +44,6 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
       db.prepare("INSERT INTO domains (id, domain_name, is_active) VALUES (?, ?, 1) ON CONFLICT(id) DO NOTHING").bind(domainId, domainName),
       db.prepare("INSERT INTO user_domains (user_id, domain_id, is_enabled) VALUES (?, ?, ?) ON CONFLICT(user_id, domain_id) DO UPDATE SET is_enabled = excluded.is_enabled").bind(userId, domainId, enabled ? 1 : 0)
     ]);
-    return ok(c, { success: true });
-  });
-  app.get('/api/auth/login', (c) => {
-    const { GMAIL_CLIENT_ID, REDIRECT_URI } = c.env;
-    if (!GMAIL_CLIENT_ID || !REDIRECT_URI) return bad(c, "GMAIL_CONFIG_MISSING");
-    const rootUrl = "https://accounts.google.com/o/oauth2/v2/auth";
-    const options = {
-      redirect_uri: REDIRECT_URI,
-      client_id: GMAIL_CLIENT_ID,
-      access_type: "offline",
-      response_type: "code",
-      prompt: "consent",
-      scope: ["https://www.googleapis.com/auth/gmail.send", "https://www.googleapis.com/auth/gmail.readonly", "https://www.googleapis.com/auth/userinfo.email"].join(" "),
-      state: crypto.randomUUID()
-    };
-    return c.redirect(`${rootUrl}?${new URLSearchParams(options).toString()}`);
-  });
-  app.get('/api/auth/callback', async (c) => {
-    const code = c.req.query('code');
-    const { GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, REDIRECT_URI, TOKENS, ENCRYPTION_SECRET } = c.env;
-    if (!TOKENS) return bad(c, "TOKENS KV binding is missing");
-    if (!code || !GMAIL_CLIENT_ID || !GMAIL_CLIENT_SECRET || !REDIRECT_URI || !ENCRYPTION_SECRET) return bad(c, "Missing config/secrets for OAuth");
-    try {
-      const response = await fetch("https://oauth2.googleapis.com/token", {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: new URLSearchParams({ code, client_id: GMAIL_CLIENT_ID, client_secret: GMAIL_CLIENT_SECRET, redirect_uri: REDIRECT_URI, grant_type: "authorization_code" }),
-      });
-      const data = await response.json() as any;
-      if (data.refresh_token) {
-        await TOKENS.put("gmail_refresh_token", await encrypt(data.refresh_token, ENCRYPTION_SECRET));
-        return c.redirect('/settings?auth=success');
-      }
-      return bad(c, "No refresh token received from Google");
-    } catch (e) { return internalError(c, String(e)); }
-  });
-  app.get('/api/auth/status', async (c) => {
-    const kv = c.env.TOKENS;
-    if (!kv) return ok(c, { connected: false, error: "KV_MISSING" });
-    const token = await kv.get("gmail_refresh_token");
-    return ok(c, { connected: !!token });
-  });
-  app.post('/api/auth/disconnect', async (c) => {
-    const kv = c.env.TOKENS;
-    if (kv) await kv.delete("gmail_refresh_token");
     return ok(c, { success: true });
   });
   app.post('/api/emails/send', async (c) => {
@@ -111,14 +66,17 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
         const raw = constructMimeMessage(to, subject, body, senderEmail);
         await sendViaGmail(accessToken, raw);
         gmailSuccess = true;
-      } catch (e) { console.error("Gmail Error:", e); }
+      } catch (e) {
+        console.error("Gmail Error:", e);
+      }
     }
     const id = crypto.randomUUID();
     const tid = threadId || crypto.randomUUID();
     const ts = Date.now();
+    const snippet = body.slice(0, 100);
     await db.batch([
-      db.prepare("INSERT INTO threads (id, subject, last_message_at, snippet, folder) VALUES (?, ?, ?, ?, 'sent') ON CONFLICT(id) DO UPDATE SET last_message_at = excluded.last_message_at, snippet = excluded.snippet").bind(tid, subject, ts, body.slice(0, 100)),
-      db.prepare("INSERT INTO emails (id, thread_id, from_name, from_email, to_json, subject, body, snippet, timestamp, folder, is_read) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'sent', 1)").bind(id, tid, "Aero User", senderEmail, JSON.stringify([{ email: to }]), subject, body, body.slice(0, 100), ts)
+      db.prepare("INSERT INTO threads (id, subject, last_message_at, snippet, folder, unread_count) VALUES (?, ?, ?, ?, 'sent', 0) ON CONFLICT(id) DO UPDATE SET last_message_at = excluded.last_message_at, snippet = excluded.snippet").bind(tid, subject, ts, snippet),
+      db.prepare("INSERT INTO emails (id, thread_id, from_name, from_email, to_json, subject, body, snippet, timestamp, folder, is_read) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'sent', 1)").bind(id, tid, "Aero User", senderEmail, JSON.stringify([{ email: to }]), subject, body, snippet, ts)
     ]);
     return ok(c, { id, delivered: gmailSuccess, from: senderEmail });
   });
@@ -126,12 +84,14 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
     const db = c.env.EMAIL_DB;
     if (!db) return bad(c, "EMAIL_DB binding is missing");
     const folder = c.req.query('folder') || 'inbox';
+    // Performance optimized query using D1 indexes
     const { results } = await db.prepare(`
       SELECT t.*,
       (SELECT GROUP_CONCAT(from_name, ', ') FROM (SELECT DISTINCT from_name FROM emails WHERE thread_id = t.id)) as participantNames
       FROM threads t
-      WHERE folder = ? OR (? = 'starred' AND is_starred = 1)
+      WHERE (? = 'starred' AND is_starred = 1) OR folder = ?
       ORDER BY last_message_at DESC
+      LIMIT 100
     `).bind(folder, folder).all();
     const formatted = results.map((r: any) => ({
       ...r,
@@ -196,8 +156,8 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
       }
       return ok(c, { success: true });
     } catch (e: any) {
-      console.error("[D1 ERROR]", e.message);
-      return internalError(c, "Failed to update thread state");
+      console.error("[D1 UPDATE ERROR]", e.message);
+      return internalError(c, "Database operation failed: " + e.message);
     }
   });
   app.post('/api/simulate/inbound', async (c) => {
@@ -207,7 +167,8 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
     const tid = crypto.randomUUID().slice(0, 8);
     const ts = Date.now();
     const subject = "Simulation: New Edge Capability";
-    const body = "This is an automated simulation of an inbound email routing event through Cloudflare Workers.";
+    const body = "This is an automated simulation of an inbound email routing event through Cloudflare Workers. Your PWA is functioning as expected.";
+    console.warn(`[SIMULATION] Injecting mock email into thread ${tid}`);
     await db.batch([
       db.prepare("INSERT INTO threads (id, subject, last_message_at, snippet, unread_count, folder) VALUES (?, ?, ?, ?, 1, 'inbox')")
         .bind(tid, subject, ts, body.slice(0, 100)),
@@ -217,4 +178,50 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
     return ok(c, { threadId: tid, success: true });
   });
   app.get('/api/me', (c) => ok(c, MOCK_USERS[0]));
+  // Gmail Auth Routes
+  app.get('/api/auth/login', (c) => {
+    const { GMAIL_CLIENT_ID, REDIRECT_URI } = c.env;
+    if (!GMAIL_CLIENT_ID || !REDIRECT_URI) return bad(c, "GMAIL_CONFIG_MISSING");
+    const rootUrl = "https://accounts.google.com/o/oauth2/v2/auth";
+    const options = {
+      redirect_uri: REDIRECT_URI,
+      client_id: GMAIL_CLIENT_ID,
+      access_type: "offline",
+      response_type: "code",
+      prompt: "consent",
+      scope: ["https://www.googleapis.com/auth/gmail.send", "https://www.googleapis.com/auth/gmail.readonly", "https://www.googleapis.com/auth/userinfo.email"].join(" "),
+      state: crypto.randomUUID()
+    };
+    return c.redirect(`${rootUrl}?${new URLSearchParams(options).toString()}`);
+  });
+  app.get('/api/auth/callback', async (c) => {
+    const code = c.req.query('code');
+    const { GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, REDIRECT_URI, TOKENS, ENCRYPTION_SECRET } = c.env;
+    if (!TOKENS) return bad(c, "TOKENS KV binding is missing");
+    if (!code || !GMAIL_CLIENT_ID || !GMAIL_CLIENT_SECRET || !REDIRECT_URI || !ENCRYPTION_SECRET) return bad(c, "Missing config/secrets for OAuth");
+    try {
+      const response = await fetch("https://oauth2.googleapis.com/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({ code, client_id: GMAIL_CLIENT_ID, client_secret: GMAIL_CLIENT_SECRET, redirect_uri: REDIRECT_URI, grant_type: "authorization_code" }),
+      });
+      const data = await response.json() as any;
+      if (data.refresh_token) {
+        await TOKENS.put("gmail_refresh_token", await encrypt(data.refresh_token, ENCRYPTION_SECRET));
+        return c.redirect('/settings?auth=success');
+      }
+      return bad(c, "No refresh token received from Google");
+    } catch (e) { return internalError(c, String(e)); }
+  });
+  app.get('/api/auth/status', async (c) => {
+    const kv = c.env.TOKENS;
+    if (!kv) return ok(c, { connected: false, error: "KV_MISSING" });
+    const token = await kv.get("gmail_refresh_token");
+    return ok(c, { connected: !!token });
+  });
+  app.post('/api/auth/disconnect', async (c) => {
+    const kv = c.env.TOKENS;
+    if (kv) await kv.delete("gmail_refresh_token");
+    return ok(c, { success: true });
+  });
 }

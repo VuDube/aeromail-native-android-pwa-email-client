@@ -19,7 +19,6 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
     if (res.redirected) {
       console.log("[API] Navigating to redirect URL:", res.url);
       window.location.href = res.url;
-      // Return a promise that never resolves as the page is unloading
       return new Promise(() => {});
     }
     const rawText = await res.text();
@@ -32,19 +31,29 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
       if (text.includes('gmail_config_missing')) {
         throw new Error("Outbound integration is not configured. Please set GMAIL_CLIENT_ID and other secrets in Cloudflare.");
       }
-      if (text.includes('binding') || res.status === 500) {
-        throw new Error("System binding error. Check if EMAIL_DB or TOKENS is correctly attached.");
+      if (text.includes('binding') || text.includes('d1_error') || res.status === 500) {
+        throw new Error("Infrastructure Error: The database (D1) or storage (KV) binding is missing or disconnected. Please verify your wrangler.jsonc configuration.");
       }
-      throw new Error(`Invalid response format (${res.status}).`);
+      throw new Error(`Critical Server Error (${res.status}): The backend returned an invalid response format.`);
     }
-    if (!res.ok || !json.success || json.data === undefined) {
-      throw new Error(json.error || `Request failed with status ${res.status}`);
+    if (!res.ok || !json.success) {
+      const errorMessage = json.error || `Request failed with status ${res.status}`;
+      // Special handling for D1 specific errors returned in payload
+      if (errorMessage.includes("D1_ERROR") || errorMessage.includes("prepare")) {
+        throw new Error("Cloudflare D1 Database Error: Failed to execute query. Check binding 'EMAIL_DB'.");
+      }
+      throw new Error(errorMessage);
+    }
+    // Handle cases where success is true but data is null/undefined unexpectedly
+    if (json.data === undefined) {
+      throw new Error("The server completed the request but did not return any data.");
     }
     return json.data;
   } catch (e: any) {
     if (e.name === 'AbortError') {
-      throw new Error("Connection timed out. Check your network or the Cloudflare status.");
+      throw new Error("Connection timed out. The edge network is taking too long to respond.");
     }
+    console.error("[API CLIENT ERROR]", e.message);
     throw e;
   } finally {
     clearTimeout(timeoutId);

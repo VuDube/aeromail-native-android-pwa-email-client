@@ -1,4 +1,4 @@
-import React, { useEffect, memo, useState, useMemo } from 'react';
+import React, { useEffect, memo, useState, useMemo, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api-client';
@@ -48,6 +48,7 @@ export function ThreadPage() {
   const [replyBody, setReplyBody] = useState('');
   const [isReplying, setIsReplying] = useState(false);
   const [selectedFrom, setSelectedFrom] = useState('user@aeromail.dev');
+  const markedRef = useRef<string | null>(null);
   const { data: domains } = useQuery({ queryKey: ['domains'], queryFn: () => api<DomainInfo[]>('/api/domains') });
   const enabledDomains = useMemo(() => domains?.filter(d => d.localEnabled) || [], [domains]);
   const { data: threadData, isLoading } = useQuery<{ thread: EmailThread }>({
@@ -58,17 +59,20 @@ export function ThreadPage() {
   const thread = threadData?.thread;
   const messages = thread?.messages || [];
   const markAsRead = useMutation({
-    mutationFn: () => api(`/api/threads/${id}`, { method: 'PATCH', body: JSON.stringify({ isRead: true }) }),
+    mutationFn: (threadId: string) => api(`/api/threads/${threadId}`, { method: 'PATCH', body: JSON.stringify({ isRead: true }) }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['threads'] });
       queryClient.invalidateQueries({ queryKey: ['thread', id] });
     }
   });
   useEffect(() => {
-    if (id && thread && thread.unreadCount > 0) {
-      markAsRead.mutate();
+    // Prevent infinite loops by checking if we already marked this specific ID in this session
+    // and verifying the thread actually has unread messages.
+    if (id && thread && thread.unreadCount > 0 && markedRef.current !== id && !markAsRead.isPending && !markAsRead.isSuccess) {
+      markedRef.current = id;
+      markAsRead.mutate(id);
     }
-  }, [id, thread, markAsRead]);
+  }, [id, thread?.unreadCount, markAsRead.isPending, markAsRead.isSuccess]);
   useEffect(() => {
     if (enabledDomains.length > 0 && selectedFrom === 'user@aeromail.dev') {
       setSelectedFrom(`hello@${enabledDomains[0].name}`);
@@ -77,12 +81,13 @@ export function ThreadPage() {
   const sendReply = useMutation({
     mutationFn: (body: string) => {
       if (!thread || !messages.length) throw new Error("Thread not loaded");
+      if (!body.trim()) throw new Error("Message cannot be empty");
       return api('/api/emails/send', {
         method: 'POST',
         body: JSON.stringify({
           to: messages[messages.length - 1].from.email,
           subject: `Re: ${thread.subject}`,
-          body,
+          body: body.trim(),
           threadId: thread.id,
           fromEmail: selectedFrom
         })
@@ -94,6 +99,9 @@ export function ThreadPage() {
       setIsReplying(false);
       queryClient.invalidateQueries({ queryKey: ['thread', id] });
     },
+    onError: (err: any) => {
+      toast.error(err.message || "Failed to send reply");
+    }
   });
   if (isLoading) return <AppLayout><div className="flex h-full items-center justify-center py-40"><Loader2 className="animate-spin text-primary/20 h-10 w-10" /></div></AppLayout>;
   if (!thread) return <AppLayout><div className="max-w-7xl mx-auto px-4 py-20 text-center"><h2 className="text-2xl font-black mb-4">Not found</h2><Button onClick={() => navigate('/')}>Back</Button></div></AppLayout>;
