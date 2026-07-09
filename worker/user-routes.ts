@@ -1,13 +1,10 @@
 import { Hono } from "hono";
 import { ok, bad, internalError, notFound, Env } from './core-utils';
 import { MOCK_USERS, MOCK_EMAILS } from "@shared/mock-data";
-/**
- * Mandatory D1 Binding Guard
- * Prevents execution if the EMAIL_DB binding is missing.
- */
+import PostalMime from 'postal-mime';
 const checkDB = (c: any) => {
   if (!c.env.EMAIL_DB) {
-    return internalError(c, "Critical: D1 database binding 'EMAIL_DB' is missing. Please check your wrangler.jsonc configuration.");
+    return internalError(c, "Critical: D1 database binding 'EMAIL_DB' is missing.");
   }
   return null;
 };
@@ -18,9 +15,29 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
       mode: db ? 'production' : 'development',
       storage: db ? 'Cloudflare D1' : 'No Binding Found',
       healthy: true,
-      version: '1.1.0-master',
+      routing_ready: !!db,
+      version: '1.2.0-routing',
       location: 'Global Edge'
     });
+  });
+  app.post('/api/test/inbound-parsing', async (c) => {
+    const err = checkDB(c);
+    if (err) return err;
+    try {
+      const { rawMime } = await c.req.json();
+      if (!rawMime) return bad(c, 'rawMime required');
+      const parser = new PostalMime();
+      const parsed = await parser.parse(rawMime);
+      return ok(c, {
+        subject: parsed.subject,
+        from: parsed.from,
+        to: parsed.to,
+        snippet: (parsed.text || parsed.html || '').slice(0, 100),
+        timestamp: Date.now()
+      });
+    } catch (e) {
+      return internalError(c, `Parsing failed: ${String(e)}`);
+    }
   });
   app.get('/api/init', async (c) => {
     const err = checkDB(c);
@@ -146,8 +163,8 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
     const db = c.env.EMAIL_DB;
     const threadId = crypto.randomUUID();
     const ts = Date.now();
-    const subject = "Urgent: Performance Metrics";
-    const body = "We have successfully migrated all legacy data to D1. Edge latency is down 40%.";
+    const subject = "AeroMail Routing Test";
+    const body = "This is an inbound simulation testing the relational database path.";
     try {
       await db.batch([
         db.prepare("INSERT INTO threads (id, subject, last_message_at, snippet, unread_count, folder) VALUES (?, ?, ?, ?, 1, 'inbox')").bind(threadId, subject, ts, body.slice(0, 100)),
