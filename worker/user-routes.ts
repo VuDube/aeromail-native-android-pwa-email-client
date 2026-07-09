@@ -1,17 +1,13 @@
 import { Hono } from "hono";
 import { ok, bad, internalError, notFound, Env, getGmailAccessToken, constructMimeMessage, sendViaGmail, encrypt } from './core-utils';
-import { MOCK_USERS, MOCK_EMAILS } from "@shared/mock-data";
+import { MOCK_USERS } from "@shared/mock-data";
 export function userRoutes(app: Hono<{ Bindings: Env }>) {
   app.get('/api/status', (c) => {
-    const db = c.env.EMAIL_DB;
-    const kv = c.env.TOKENS;
     return ok(c, {
-      mode: db ? 'production' : 'development',
-      storage: db ? 'Cloudflare D1' : 'No Binding Found',
-      kv_ready: !!kv,
-      gmail_config: !!(c.env.GMAIL_CLIENT_ID && c.env.GMAIL_CLIENT_SECRET),
-      healthy: true,
-      version: '1.3.0-oauth'
+      gmail_config: !!(c.env.GMAIL_CLIENT_ID && c.env.GMAIL_CLIENT_SECRET && c.env.REDIRECT_URI && c.env.ENCRYPTION_SECRET),
+      kv_ready: !!c.env.TOKENS,
+      db_ready: !!c.env.EMAIL_DB,
+      version: '1.4.0-gmail-ready'
     });
   });
   app.get('/api/auth/login', (c) => {
@@ -58,7 +54,8 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
         await TOKENS.put("gmail_refresh_token", encrypted);
         return c.redirect('/settings?auth=success');
       }
-      return bad(c, "No refresh token received from Google");
+      // If user already authorized, refresh_token might not be present unless prompt=consent was used
+      return bad(c, "No refresh token received. Try disconnecting and reconnecting.");
     } catch (e) {
       return internalError(c, String(e));
     }
@@ -87,15 +84,25 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
         await sendViaGmail(accessToken, raw);
         gmailSuccess = true;
       } catch (e) {
-        console.error("Gmail sending failed:", e);
+        console.error("Gmail sending failed, falling back to local storage only:", e);
       }
     }
     const id = crypto.randomUUID();
     const tid = threadId || crypto.randomUUID();
     const ts = Date.now();
+    // Persist to D1 Sent Folder
     await db.batch([
-      db.prepare("INSERT INTO threads (id, subject, last_message_at, snippet, folder) VALUES (?, ?, ?, ?, 'sent') ON CONFLICT(id) DO UPDATE SET last_message_at = excluded.last_message_at, snippet = excluded.snippet").bind(tid, subject, ts, body.slice(0, 100)),
-      db.prepare("INSERT INTO emails (id, thread_id, from_name, from_email, to_json, subject, body, snippet, timestamp, folder, is_read) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'sent', 1)").bind(id, tid, "Aero User", "user@aeromail.dev", JSON.stringify([{ email: to }]), subject, body, body.slice(0, 100), ts)
+      db.prepare(`
+        INSERT INTO threads (id, subject, last_message_at, snippet, folder) 
+        VALUES (?, ?, ?, ?, 'sent') 
+        ON CONFLICT(id) DO UPDATE SET 
+          last_message_at = excluded.last_message_at, 
+          snippet = excluded.snippet
+      `).bind(tid, subject, ts, body.slice(0, 100)),
+      db.prepare(`
+        INSERT INTO emails (id, thread_id, from_name, from_email, to_json, subject, body, snippet, timestamp, folder, is_read) 
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'sent', 1)
+      `).bind(id, tid, "Aero User", "user@aeromail.dev", JSON.stringify([{ email: to }]), subject, body, body.slice(0, 100), ts)
     ]);
     return ok(c, { id, delivered: gmailSuccess });
   });
@@ -105,22 +112,8 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
     const folder = c.req.query('folder') || 'inbox';
     try {
       const { results } = await db.prepare("SELECT * FROM threads WHERE folder = ? OR (? = 'starred' AND is_starred = 1) ORDER BY last_message_at DESC").bind(folder, folder).all();
-      const threads = await Promise.all(results.map(async (t: any) => {
-        const msgs = await db.prepare("SELECT from_name FROM emails WHERE thread_id = ?").bind(t.id).all();
-        return { ...t, lastMessageAt: t.last_message_at, unreadCount: t.unread_count, isStarred: !!t.is_starred, participantNames: Array.from(new Set(msgs.results.map((m: any) => m.from_name))) };
-      }));
-      return ok(c, threads);
+      return ok(c, results);
     } catch (e) { return internalError(c, String(e)); }
-  });
-  app.get('/api/threads/:id', async (c) => {
-    const db = c.env.EMAIL_DB;
-    if (!db) return internalError(c, "D1 Missing");
-    const id = c.req.param('id');
-    const threadRecord = await db.prepare("SELECT * FROM threads WHERE id = ?").bind(id).first() as any;
-    if (!threadRecord) return notFound(c);
-    const msgs = await db.prepare("SELECT * FROM emails WHERE thread_id = ? ORDER BY timestamp ASC").bind(id).all();
-    const thread = { ...threadRecord, lastMessageAt: threadRecord.last_message_at, isStarred: !!threadRecord.is_starred, unreadCount: threadRecord.unread_count, messages: msgs.results.map((m: any) => ({ ...m, from: { name: m.from_name, email: m.from_email }, to: JSON.parse(m.to_json) })) };
-    return ok(c, { ...thread.messages[thread.messages.length - 1], thread });
   });
   app.get('/api/me', (c) => ok(c, MOCK_USERS[0]));
 }

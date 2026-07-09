@@ -21,18 +21,19 @@ export const internalError = (c: Context, error: string) => {
   return c.json({ success: false, error } as ApiResponse, 500);
 };
 /**
- * Basic AES-GCM Encryption/Decryption Helpers
+ * Basic AES-GCM Encryption/Decryption Helpers using Web Crypto
  */
 async function getCryptoKey(secret: string) {
   const enc = new TextEncoder();
-  const keyMaterial = await crypto.subtle.importKey(
+  // Ensure secret is 32 bytes for AES-256
+  const keyData = enc.encode(secret.padEnd(32, '0').slice(0, 32));
+  return crypto.subtle.importKey(
     "raw",
-    enc.encode(secret.padEnd(32, '0').slice(0, 32)),
-    "AES-GCM",
+    keyData,
+    { name: "AES-GCM" },
     false,
     ["encrypt", "decrypt"]
   );
-  return keyMaterial;
 }
 export async function encrypt(text: string, secret: string): Promise<string> {
   const key = await getCryptoKey(secret);
@@ -42,6 +43,7 @@ export async function encrypt(text: string, secret: string): Promise<string> {
   const combined = new Uint8Array(iv.length + ciphertext.byteLength);
   combined.set(iv);
   combined.set(new Uint8Array(ciphertext), iv.length);
+  // Return as Base64 string
   return btoa(String.fromCharCode(...combined));
 }
 export async function decrypt(encryptedBase64: string, secret: string): Promise<string> {
@@ -56,7 +58,10 @@ export async function decrypt(encryptedBase64: string, secret: string): Promise<
  * Gmail OAuth2 & API Helpers
  */
 export async function getGmailAccessToken(env: Env): Promise<string | null> {
-  if (!env.TOKENS || !env.ENCRYPTION_SECRET || !env.GMAIL_CLIENT_ID || !env.GMAIL_CLIENT_SECRET) return null;
+  if (!env.TOKENS || !env.ENCRYPTION_SECRET || !env.GMAIL_CLIENT_ID || !env.GMAIL_CLIENT_SECRET) {
+    console.warn("Gmail config or TOKENS binding missing");
+    return null;
+  }
   const encryptedToken = await env.TOKENS.get("gmail_refresh_token");
   if (!encryptedToken) return null;
   try {
@@ -72,9 +77,13 @@ export async function getGmailAccessToken(env: Env): Promise<string | null> {
       }),
     });
     const data = await response.json() as any;
+    if (data.error) {
+      console.error("Gmail Token Refresh Error:", data.error_description || data.error);
+      return null;
+    }
     return data.access_token || null;
   } catch (e) {
-    console.error("Token refresh failed:", e);
+    console.error("Token refresh operation failed:", e);
     return null;
   }
 }
@@ -87,8 +96,11 @@ export function constructMimeMessage(to: string, subject: string, body: string):
     '',
     body
   ].join('\r\n');
-  // Base64Url encode
-  return btoa(mime).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  // Base64Url encode (standard for Gmail API)
+  return btoa(mime)
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '');
 }
 export async function sendViaGmail(accessToken: string, rawMessage: string) {
   const response = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/messages/send", {
