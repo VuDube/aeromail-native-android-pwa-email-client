@@ -7,6 +7,7 @@ export interface Env {
   GMAIL_CLIENT_SECRET?: string;
   REDIRECT_URI?: string;
   ENCRYPTION_SECRET?: string;
+  CF_API_TOKEN?: string;
 }
 export const ok = <T>(c: Context, data: T) => {
   return c.json({ success: true, data } as ApiResponse<T>);
@@ -20,12 +21,35 @@ export const notFound = (c: Context, error = 'Resource not found') => {
 export const internalError = (c: Context, error: string) => {
   return c.json({ success: false, error } as ApiResponse, 500);
 };
-/**
- * Basic AES-GCM Encryption/Decryption Helpers using Web Crypto
- */
+export async function fetchCloudflare<T>(env: Env, path: string, init?: RequestInit): Promise<T> {
+  if (!env.CF_API_TOKEN) throw new Error("CF_API_TOKEN_MISSING");
+  const res = await fetch(`https://api.cloudflare.com/client/v4${path}`, {
+    ...init,
+    headers: {
+      ...init?.headers,
+      "Authorization": `Bearer ${env.CF_API_TOKEN}`,
+      "Content-Type": "application/json",
+    },
+  });
+  const data = await res.json() as any;
+  if (!res.ok || !data.success) {
+    throw new Error(data.errors?.[0]?.message || "Cloudflare API Error");
+  }
+  return data.result as T;
+}
+export async function getCloudflareZones(env: Env) {
+  return fetchCloudflare<any[]>(env, "/zones");
+}
+export async function getZoneEmailRoutingStatus(env: Env, zoneId: string) {
+  try {
+    const res = await fetchCloudflare<any>(env, `/zones/${zoneId}/email/routing`);
+    return res.status === "enabled";
+  } catch {
+    return false;
+  }
+}
 async function getCryptoKey(secret: string) {
   const enc = new TextEncoder();
-  // Ensure secret is 32 bytes for AES-256
   const keyData = enc.encode(secret.padEnd(32, '0').slice(0, 32));
   return crypto.subtle.importKey(
     "raw",
@@ -43,7 +67,6 @@ export async function encrypt(text: string, secret: string): Promise<string> {
   const combined = new Uint8Array(iv.length + ciphertext.byteLength);
   combined.set(iv);
   combined.set(new Uint8Array(ciphertext), iv.length);
-  // Return as Base64 string
   return btoa(String.fromCharCode(...combined));
 }
 export async function decrypt(encryptedBase64: string, secret: string): Promise<string> {
@@ -54,12 +77,8 @@ export async function decrypt(encryptedBase64: string, secret: string): Promise<
   const decrypted = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, ciphertext);
   return new TextDecoder().decode(decrypted);
 }
-/**
- * Gmail OAuth2 & API Helpers
- */
 export async function getGmailAccessToken(env: Env): Promise<string | null> {
   if (!env.TOKENS || !env.ENCRYPTION_SECRET || !env.GMAIL_CLIENT_ID || !env.GMAIL_CLIENT_SECRET) {
-    console.warn("Gmail config or TOKENS binding missing");
     return null;
   }
   const encryptedToken = await env.TOKENS.get("gmail_refresh_token");
@@ -77,26 +96,21 @@ export async function getGmailAccessToken(env: Env): Promise<string | null> {
       }),
     });
     const data = await response.json() as any;
-    if (data.error) {
-      console.error("Gmail Token Refresh Error:", data.error_description || data.error);
-      return null;
-    }
     return data.access_token || null;
-  } catch (e) {
-    console.error("Token refresh operation failed:", e);
+  } catch {
     return null;
   }
 }
-export function constructMimeMessage(to: string, subject: string, body: string): string {
+export function constructMimeMessage(to: string, subject: string, body: string, from?: string): string {
   const mime = [
+    from ? `From: ${from}` : '',
     `To: ${to}`,
     `Subject: ${subject}`,
     `Content-Type: text/plain; charset="UTF-8"`,
     `MIME-Version: 1.0`,
     '',
     body
-  ].join('\r\n');
-  // Base64Url encode (standard for Gmail API)
+  ].filter(Boolean).join('\r\n');
   return btoa(mime)
     .replace(/\+/g, '-')
     .replace(/\//g, '_')

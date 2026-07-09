@@ -47,3 +47,15 @@ export interface EmailThread {
   isStarred: boolean;
   folder: FolderType;
 }
+export interface DomainInfo {
+  id: string;
+  name: string;
+  status: 'active' | 'pending' | 'deleted';
+  isRoutingEnabled: boolean;
+  localEnabled: boolean;
+}
+export interface UserDomain {
+  userId: string;
+  domainId: string;
+  isEnabled: boolean;
+}
