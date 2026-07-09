@@ -19,14 +19,12 @@ import {
   User as UserIcon,
   Layout,
   ShieldCheck,
-  MailPlus,
-  Wand2,
-  Database,
-  CloudOff,
-  AlertTriangle,
+  Zap,
   Cpu,
   Route,
-  ChevronRight
+  ChevronRight,
+  Database,
+  CloudOff
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Link } from 'react-router-dom';
@@ -44,17 +42,19 @@ export function SettingsPage() {
   });
   const isMockMode = !status?.routing_ready;
   const runDiagnostic = useMutation({
-    mutationFn: () => api('/api/test/inbound-parsing', { 
-      method: 'POST', 
+    mutationFn: () => api('/api/test/inbound-parsing', {
+      method: 'POST',
       body: JSON.stringify({ rawMime: "From: alex@example.com\nSubject: Hello AeroMail\n\nDiagnostic Test content." })
     }),
     onSuccess: (data: any) => {
-      toast.success('Diagnostic complete', {
-        description: `Parsed subject: ${data.subject}`
+      toast.success('Inbound Diagnostic Success', {
+        description: `Parsed thread ID: ${data.threadId.slice(0, 8)}...`
       });
     },
     onError: (err: any) => {
-      toast.error('Diagnostic failed: ' + err.message);
+      toast.error('Diagnostic Failed', {
+        description: err.message
+      });
     }
   });
   const resetData = useMutation({
@@ -91,24 +91,24 @@ export function SettingsPage() {
               </div>
               <Card className="rounded-m3-lg border-none bg-surface-1 shadow-sm overflow-hidden">
                 <CardContent className="p-6">
-                  <div className="flex items-center justify-between gap-6">
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
                     <div className="space-y-1 flex-1">
                       <p className="text-sm font-bold">Cloudflare Email Routing</p>
                       <p className="text-xs text-muted-foreground leading-relaxed">
-                        Detecting connection to <code className="bg-muted px-1 rounded">worker/email-routing.ts</code>.
+                        Detecting connectivity for <strong>Global Inbound Streams</strong>. Ensure your Worker is bound to D1 'EMAIL_DB'.
                       </p>
                       <Link to="/docs" className="text-[10px] text-primary font-black uppercase flex items-center gap-1 hover:underline mt-2">
-                        View Integration Guide <ChevronRight className="h-3 w-3" />
+                        Integration Guide <ChevronRight className="h-3 w-3" />
                       </Link>
                     </div>
-                    <Button 
+                    <Button
                       onClick={() => runDiagnostic.mutate()}
                       disabled={runDiagnostic.isPending}
-                      variant="outline" 
-                      className="rounded-full gap-2 px-6 border-primary/20 text-primary"
+                      variant="outline"
+                      className="rounded-full gap-2 px-6 border-primary/20 text-primary shadow-sm hover:bg-primary/5 shrink-0"
                     >
                       {runDiagnostic.isPending ? <RefreshCcw className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />}
-                      Run Diagnostic
+                      Test Parsing
                     </Button>
                   </div>
                 </CardContent>

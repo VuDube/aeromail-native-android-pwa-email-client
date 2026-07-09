@@ -8,6 +8,14 @@ const checkDB = (c: any) => {
   }
   return null;
 };
+async function generateThreadId(subject: string, fromEmail: string): Promise<string> {
+  const normalizedSubject = subject.replace(/^(re|fwd|aw|fw|reply|forward):\s*/i, '').trim().toLowerCase();
+  const encoder = new TextEncoder();
+  const data = encoder.encode(`${normalizedSubject}-${fromEmail.toLowerCase()}`);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('').slice(0, 16);
+}
 export function userRoutes(app: Hono<{ Bindings: Env }>) {
   app.get('/api/status', (c) => {
     const db = c.env.EMAIL_DB;
@@ -28,10 +36,12 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
       if (!rawMime) return bad(c, 'rawMime required');
       const parser = new PostalMime();
       const parsed = await parser.parse(rawMime);
+      const threadId = await generateThreadId(parsed.subject || '', parsed.from?.address || '');
       return ok(c, {
         subject: parsed.subject,
         from: parsed.from,
         to: parsed.to,
+        threadId,
         snippet: (parsed.text || parsed.html || '').slice(0, 100),
         timestamp: Date.now()
       });
