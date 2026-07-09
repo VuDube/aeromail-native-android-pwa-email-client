@@ -120,6 +120,11 @@ function runSetupCommands() {
         "bun",
         "add",
         "lucide-react@0.453.0"
+    ],
+    [
+        "bun",
+        "add",
+        "@tanstack/react-query"
     ]
 ];
     const ALLOWED = new Set(['npm', 'yarn', 'pnpm', 'bun']);
