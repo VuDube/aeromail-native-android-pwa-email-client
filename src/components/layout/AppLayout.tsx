@@ -1,11 +1,12 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { Inbox, Send, Trash2, Star, Settings, ChevronLeft, Search } from "lucide-react";
+import { Inbox, Send, Trash2, Star, Settings, ChevronLeft, Search, ArrowUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { motion, AnimatePresence } from "framer-motion";
 import { useDensity } from "@/hooks/use-density";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 const NAV_ITEMS = [
   { icon: Inbox, label: "Inbox", path: "/", match: (p: string) => p === "/" || p === "/inbox" },
   { icon: Star, label: "Starred", path: "/starred", match: (p: string) => p === "/starred" },
@@ -17,14 +18,18 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const location = useLocation();
   const navigate = useNavigate();
   const { density } = useDensity();
+  const [showScrollTop, setShowScrollTop] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
   const pathname = location?.pathname || "/";
   const isActive = (item: typeof NAV_ITEMS[0]) => item.match(pathname);
-  const isSettingsActive = pathname === "/settings";
-  const showBack = isMobile && (
-    pathname.startsWith('/thread/') ||
-    pathname === '/compose' ||
-    pathname === '/settings'
-  );
+  useEffect(() => {
+    const handleScroll = (e: any) => {
+      setShowScrollTop(e.target.scrollTop > 400);
+    };
+    const mainArea = document.getElementById("main-scroll-area");
+    mainArea?.addEventListener("scroll", handleScroll);
+    return () => mainArea?.removeEventListener("scroll", handleScroll);
+  }, []);
   const getPageTitle = () => {
     if (pathname === '/compose') return 'Compose';
     if (pathname === '/settings') return 'Settings';
@@ -34,120 +39,142 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   };
   return (
     <div className={cn(
-      "flex h-screen w-full bg-background overflow-hidden text-foreground selection:bg-primary/20",
+      "flex h-screen w-full bg-background overflow-hidden text-foreground",
       density === 'compact' ? "density-compact" : "density-comfortable"
     )}>
-      {/* Desktop Navigation Rail */}
+      {/* System Status Line */}
+      <div className="fixed top-0 left-0 right-0 h-[2px] z-[100] pointer-events-none overflow-hidden">
+        <motion.div 
+          className="h-full bg-primary"
+          initial={{ x: "-100%" }}
+          animate={isSyncing ? { x: "100%" } : { x: "-100%" }}
+          transition={isSyncing ? { duration: 1.5, repeat: Infinity, ease: "linear" } : { duration: 0.3 }}
+        />
+      </div>
       {!isMobile && (
         <aside className={cn(
-          "flex flex-col border-r bg-surface-1/50 transition-all duration-300 relative z-30",
-          density === 'compact' ? "w-16 md:w-56" : "w-20 md:w-64"
+          "flex flex-col border-r bg-surface-1 transition-all duration-300 relative z-30",
+          density === 'compact' ? "w-20 lg:w-64" : "w-24 lg:w-72"
         )}>
-          <div className={cn("flex items-center gap-3", density === 'compact' ? "px-4 py-6" : "px-6 py-8")}>
-            <div className="h-10 w-10 bg-primary rounded-xl flex items-center justify-center text-primary-foreground font-black shadow-lg shadow-primary/20 transition-transform hover:rotate-6">A</div>
-            <span className="hidden md:block font-bold text-xl tracking-tighter text-on-surface">AeroMail</span>
+          <div className="px-6 py-8 flex items-center gap-3">
+            <div className="h-10 w-10 bg-primary rounded-xl flex items-center justify-center text-primary-foreground font-black shadow-xl shadow-primary/20 transition-transform hover:rotate-12 cursor-pointer">A</div>
+            <span className="hidden lg:block font-black text-xl tracking-tighter">AeroMail</span>
           </div>
-          <nav className="flex-1 px-3 space-y-1.5">
-            {NAV_ITEMS.map((item) => (
-              <Link
-                key={item.label}
-                to={item.path}
-                className={cn(
-                  "flex items-center gap-4 px-4 rounded-full transition-all duration-300 group relative",
-                  density === 'compact' ? "py-2.5" : "py-3.5",
-                  isActive(item)
-                    ? "text-primary font-bold"
-                    : "text-on-surface-variant hover:bg-surface-2"
-                )}
-              >
-                {isActive(item) && (
-                  <motion.div 
-                    layoutId="nav-active-bg"
-                    className="absolute inset-0 bg-primary-container rounded-full -z-10"
-                    transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
-                  />
-                )}
-                <item.icon className={cn("h-5 w-5 shrink-0 transition-transform group-active:scale-90", isActive(item) && "fill-current")} />
-                <span className="hidden md:block text-sm tracking-tight">{item.label}</span>
-              </Link>
-            ))}
-          </nav>
-          <div className="px-3 pb-8">
-            <Link
-              to="/settings"
-              className={cn(
-                "flex items-center gap-4 px-4 py-3 rounded-full transition-all group relative",
-                isSettingsActive ? "text-primary font-bold" : "text-on-surface-variant hover:bg-surface-2"
-              )}
-            >
-              {isSettingsActive && (
-                <motion.div 
-                  layoutId="nav-active-bg"
-                  className="absolute inset-0 bg-primary-container rounded-full -z-10"
-                />
-              )}
-              <Settings className={cn("h-5 w-5 transition-transform group-hover:rotate-45", isSettingsActive && "animate-spin-slow")} />
-              <span className="hidden md:block text-sm font-semibold">Settings</span>
-            </Link>
-          </div>
+          <TooltipProvider delayDuration={0}>
+            <nav className="flex-1 px-4 space-y-2">
+              {NAV_ITEMS.map((item) => (
+                <Tooltip key={item.label}>
+                  <TooltipTrigger asChild>
+                    <Link
+                      to={item.path}
+                      className={cn(
+                        "flex items-center gap-4 px-4 py-3 rounded-full transition-all group relative",
+                        isActive(item) ? "text-primary font-black" : "text-on-surface-variant hover:bg-surface-2"
+                      )}
+                    >
+                      {isActive(item) && (
+                        <motion.div
+                          layoutId="nav-active-pill"
+                          className="absolute inset-0 bg-primary-container rounded-full -z-10"
+                          transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
+                        />
+                      )}
+                      <item.icon className={cn("h-6 w-6 shrink-0", isActive(item) && "fill-primary/20")} />
+                      <span className="hidden lg:block text-sm font-bold tracking-tight">{item.label}</span>
+                    </Link>
+                  </TooltipTrigger>
+                  <TooltipContent side="right" className="lg:hidden bg-on-surface text-surface text-xs font-bold">
+                    {item.label}
+                  </TooltipContent>
+                </Tooltip>
+              ))}
+            </nav>
+            <div className="px-4 pb-10">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Link
+                    to="/settings"
+                    className={cn(
+                      "flex items-center gap-4 px-4 py-3 rounded-full transition-all group relative",
+                      pathname === "/settings" ? "text-primary font-black" : "text-on-surface-variant hover:bg-surface-2"
+                    )}
+                  >
+                    {pathname === "/settings" && (
+                      <motion.div layoutId="nav-active-pill" className="absolute inset-0 bg-primary-container rounded-full -z-10" />
+                    )}
+                    <Settings className="h-6 w-6 group-hover:rotate-45 transition-transform" />
+                    <span className="hidden lg:block text-sm font-bold tracking-tight">Settings</span>
+                  </Link>
+                </TooltipTrigger>
+                <TooltipContent side="right" className="lg:hidden bg-on-surface text-surface text-xs font-bold">Settings</TooltipContent>
+              </Tooltip>
+            </div>
+          </TooltipProvider>
         </aside>
       )}
       <main className="flex-1 flex flex-col min-w-0 relative bg-background">
         {isMobile && (
-          <header className={cn(
-            "border-b bg-surface-1/80 backdrop-blur-md flex items-center px-4 gap-4 shrink-0 z-30 transition-all",
-            density === 'compact' ? "h-14" : "h-16"
-          )}>
-            {showBack ? (
-              <Button variant="ghost" size="icon" onClick={() => navigate(-1)} className="rounded-full -ml-2">
+          <header className="h-16 border-b bg-surface/80 backdrop-blur-xl flex items-center px-4 gap-4 shrink-0 z-30">
+            {pathname.startsWith('/thread/') || pathname === '/compose' ? (
+              <Button variant="ghost" size="icon" onClick={() => navigate(-1)} className="rounded-full">
                 <ChevronLeft className="h-6 w-6" />
               </Button>
             ) : (
-              <div className="h-8 w-8 bg-primary rounded-lg flex items-center justify-center text-white font-bold text-xs shadow-md">A</div>
+              <div className="h-8 w-8 bg-primary rounded-lg flex items-center justify-center text-white font-black text-xs">A</div>
             )}
-            <span className="font-bold text-lg tracking-tight truncate">{getPageTitle()}</span>
+            <span className="font-black text-lg tracking-tight truncate">{getPageTitle()}</span>
             <div className="ml-auto">
               <Button variant="ghost" size="icon" className="rounded-full"><Search className="h-5 w-5" /></Button>
             </div>
           </header>
         )}
-        <div className="flex-1 overflow-hidden relative">
+        <div id="main-scroll-area" className="flex-1 overflow-y-auto overflow-x-hidden relative custom-scrollbar">
           <AnimatePresence mode="popLayout" initial={false}>
             <motion.div
               key={pathname}
-              initial={{ opacity: 0, scale: 0.98, x: 10 }}
-              animate={{ opacity: 1, scale: 1, x: 0 }}
-              exit={{ opacity: 0, scale: 1.02, x: -10 }}
-              transition={{ duration: 0.15, ease: "circOut" }}
-              className="absolute inset-0 overflow-y-auto"
+              initial={{ opacity: 0, x: 8 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -8 }}
+              transition={{ duration: 0.15, ease: [0.4, 0, 0.2, 1] }}
+              className="min-h-full"
             >
               {children}
             </motion.div>
           </AnimatePresence>
+          <AnimatePresence>
+            {showScrollTop && (
+              <motion.button
+                initial={{ scale: 0, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0, opacity: 0 }}
+                onClick={() => document.getElementById("main-scroll-area")?.scrollTo({ top: 0, behavior: 'smooth' })}
+                className="fixed bottom-24 right-8 h-12 w-12 rounded-2xl bg-surface-variant text-on-surface-variant shadow-lg z-40 flex items-center justify-center hover:bg-primary hover:text-white transition-colors"
+              >
+                <ArrowUp className="h-6 w-6" />
+              </motion.button>
+            )}
+          </AnimatePresence>
         </div>
-        {isMobile && !pathname.startsWith('/compose') && !pathname.startsWith('/thread/') && (
-          <nav className={cn(
-            "border-t bg-surface-1/90 backdrop-blur-md flex items-center justify-around px-2 shrink-0 z-30 shadow-[0_-4px_15px_rgba(0,0,0,0.05)]",
-            density === 'compact' ? "h-14" : "h-16"
-          )}>
+        {isMobile && !pathname.startsWith('/thread/') && !pathname.startsWith('/compose') && (
+          <nav className="h-16 border-t bg-surface/90 backdrop-blur-xl flex items-center justify-around px-4 shrink-0 z-30">
             {NAV_ITEMS.map((item) => (
               <Link
                 key={item.label}
                 to={item.path}
                 className={cn(
-                  "flex flex-col items-center justify-center gap-1 w-16 h-12 rounded-2xl transition-all duration-300 relative",
-                  isActive(item) ? "text-primary" : "text-on-surface-variant opacity-70"
+                  "flex flex-col items-center justify-center gap-1 relative w-16 transition-all",
+                  isActive(item) ? "text-primary" : "text-on-surface-variant opacity-60"
                 )}
               >
                 {isActive(item) && (
-                  <motion.div 
+                  <motion.div
                     layoutId="mobile-nav-pill"
-                    className="absolute inset-x-0 h-1 bg-primary bottom-0 rounded-t-full"
-                    transition={{ type: "spring", bounce: 0.2, duration: 0.5 }}
+                    className="absolute -top-1 inset-x-0 h-8 bg-primary-container rounded-full -z-10"
+                    transition={{ type: "spring", bounce: 0.3, duration: 0.6 }}
                   />
                 )}
-                <item.icon className={cn("h-5 w-5 transition-transform", isActive(item) && "scale-110 fill-primary/10")} />
-                <span className={cn("text-[9px] font-bold tracking-wider uppercase", isActive(item) && "opacity-100")}>{item.label}</span>
+                <item.icon className={cn("h-6 w-6", isActive(item) && "fill-primary/20")} />
+                <span className="text-[10px] font-black uppercase tracking-tighter">{item.label}</span>
               </Link>
             ))}
           </nav>

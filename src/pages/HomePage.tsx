@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useParams, Link } from 'react-router-dom';
 import { api } from '@/lib/api-client';
 import { AppLayout } from '@/components/layout/AppLayout';
-import { EmailThread, FolderType } from '@shared/types';
+import { EmailThread } from '@shared/types';
 import { format } from 'date-fns';
 import { Plus, Search, Star, Loader2, RefreshCw, Archive, MailOpen, Inbox as InboxIcon, Sparkles, CloudOff } from 'lucide-react';
 import { motion, AnimatePresence, useMotionValue, useTransform } from 'framer-motion';
@@ -25,17 +25,18 @@ interface SwipeableThreadCardProps {
 const SwipeableThreadCard = forwardRef<HTMLDivElement, SwipeableThreadCardProps>(
   ({ thread, idx, density, onArchive, onToggleRead, onToggleStar }, ref) => {
     const x = useMotionValue(0);
-    const opacity = useTransform(x, [-150, 0, 150], [0.6, 1, 0.6]);
+    const scale = useTransform(x, [-100, 0, 100], [0.95, 1, 0.95]);
+    const opacity = useTransform(x, [-150, 0, 150], [0, 1, 0]);
     const isRead = thread.unreadCount === 0;
     const latestMessageId = thread.messages[thread.messages.length - 1]?.id;
     const handlers = useSwipeable({
-      onSwiping: (e) => x.set(e.deltaX * 0.8),
+      onSwiping: (e) => x.set(e.deltaX * 0.6),
       onSwipedLeft: (e) => {
-        if (Math.abs(e.deltaX) > 100) onArchive(latestMessageId);
+        if (Math.abs(e.deltaX) > 120) onArchive(latestMessageId);
         x.set(0);
       },
       onSwipedRight: (e) => {
-        if (Math.abs(e.deltaX) > 100) onToggleRead(latestMessageId, isRead);
+        if (Math.abs(e.deltaX) > 120) onToggleRead(latestMessageId, isRead);
         x.set(0);
       },
       onSwiped: () => x.set(0),
@@ -43,50 +44,50 @@ const SwipeableThreadCard = forwardRef<HTMLDivElement, SwipeableThreadCardProps>
       preventScrollOnSwipe: true,
     });
     return (
-      <div ref={ref} className="relative overflow-hidden mb-1 rounded-m3-lg group">
-        <div className="absolute inset-0 flex items-center justify-between px-6 z-0 pointer-events-none">
-          <MailOpen className="h-6 w-6 text-green-500 opacity-40" />
-          <Archive className="h-6 w-6 text-blue-500 opacity-40" />
+      <div ref={ref} className="relative overflow-hidden mb-1 rounded-m3-lg group snap-start">
+        <div className="absolute inset-0 flex items-center justify-between px-8 z-0 pointer-events-none">
+          <motion.div style={{ opacity: useTransform(x, [0, 100], [0, 1]) }} className="flex items-center gap-2 text-green-600 font-bold">
+            <MailOpen className="h-6 w-6" /> <span>Read</span>
+          </motion.div>
+          <motion.div style={{ opacity: useTransform(x, [0, -100], [0, 1]) }} className="flex items-center gap-2 text-blue-600 font-bold">
+            <span>Archive</span> <Archive className="h-6 w-6" />
+          </motion.div>
         </div>
         <motion.div
           {...handlers}
-          style={{ x, opacity }}
-          layout
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: Math.min(idx * 0.02, 0.2) }}
+          style={{ x, scale, opacity }}
           className={cn(
-            "relative z-10 flex items-start gap-4 cursor-pointer transition-all border-b border-surface-variant/20",
+            "relative z-10 flex items-start gap-4 transition-colors border-b border-surface-variant/10",
             density === 'compact' ? "p-3" : "p-5",
-            isRead ? 'bg-background hover:bg-surface-1' : 'bg-primary/5 hover:bg-primary/10 shadow-sm border-l-4 border-l-primary'
+            isRead ? 'bg-background hover:bg-surface-1' : 'bg-primary/5 hover:bg-primary/10 border-l-4 border-l-primary'
           )}
         >
-          <div className="shrink-0 pt-1 flex flex-col items-center gap-3">
-            <Avatar className={cn(density === 'compact' ? "h-9 w-9" : "h-12 w-12", "ring-2 ring-background shadow-sm")}>
-              <AvatarFallback className="bg-primary/10 text-primary text-sm font-black uppercase">
+          <div className="shrink-0 flex flex-col items-center gap-3">
+            <Avatar className={cn(density === 'compact' ? "h-10 w-10" : "h-12 w-12", "ring-2 ring-background")}>
+              <AvatarFallback className="bg-primary-container text-on-primary-container font-black text-sm uppercase">
                 {thread.participantNames[0]?.charAt(0) || 'A'}
               </AvatarFallback>
             </Avatar>
-            <button
+            <button 
               onClick={(e) => { e.preventDefault(); e.stopPropagation(); onToggleStar(latestMessageId, thread.isStarred); }}
-              className="z-20 p-1 rounded-full hover:bg-surface-variant/20 transition-colors"
+              className="p-1 rounded-full hover:bg-surface-variant/20 transition-colors"
             >
-              <Star className={cn("h-5 w-5 transition-all", thread.isStarred ? 'fill-yellow-500 text-yellow-500 scale-110' : 'text-on-surface-variant/20')} />
+              <Star className={cn("h-5 w-5", thread.isStarred ? 'fill-yellow-500 text-yellow-500' : 'text-on-surface-variant/30')} />
             </button>
           </div>
           <Link to={`/thread/${latestMessageId}`} className="flex-1 min-w-0">
-            <div className="flex items-center justify-between mb-1">
-              <span className={cn("truncate text-sm tracking-tight", !isRead ? 'font-black text-on-surface' : 'font-semibold text-on-surface-variant opacity-70')}>
+            <div className="flex items-center justify-between mb-0.5">
+              <span className={cn("truncate text-sm tracking-tight", !isRead ? "font-black" : "font-bold text-on-surface-variant")}>
                 {thread.participantNames.join(', ')}
               </span>
-              <span className="text-[11px] font-bold text-on-surface-variant opacity-50 shrink-0">
+              <span className="text-[11px] font-bold text-on-surface-variant opacity-60">
                 {format(thread.lastMessageAt, 'HH:mm')}
               </span>
             </div>
-            <h3 className={cn("truncate mb-1 text-sm font-bold tracking-tight", !isRead ? 'text-on-surface' : 'text-on-surface-variant opacity-80')}>
+            <h3 className={cn("truncate text-sm font-bold tracking-tight mb-1", !isRead ? "text-on-surface" : "text-on-surface-variant/80")}>
               {thread.subject}
             </h3>
-            <p className="text-xs text-on-surface-variant opacity-60 line-clamp-1 leading-relaxed">
+            <p className="text-xs text-on-surface-variant/60 line-clamp-1 leading-relaxed">
               {thread.snippet}
             </p>
           </Link>
@@ -101,10 +102,7 @@ export function HomePage() {
   const { folder = 'inbox' } = useParams<{ folder: string }>();
   const [searchQuery, setSearchQuery] = useState('');
   const { density } = useDensity();
-  const { data: status } = useQuery({
-    queryKey: ['status'],
-    queryFn: () => api<any>('/api/status'),
-  });
+  const { data: status } = useQuery({ queryKey: ['status'], queryFn: () => api<any>('/api/status') });
   const { data: threads, isLoading, isFetching, error } = useQuery<EmailThread[]>({
     queryKey: ['threads', folder],
     queryFn: () => api<EmailThread[]>(`/api/emails?folder=${folder}`),
@@ -113,68 +111,51 @@ export function HomePage() {
     if (!threads) return [];
     if (!searchQuery.trim()) return threads;
     const q = searchQuery.toLowerCase();
-    return threads.filter(t =>
-      t.subject.toLowerCase().includes(q) ||
+    return threads.filter(t => 
+      t.subject.toLowerCase().includes(q) || 
       t.participantNames.some(p => p.toLowerCase().includes(q)) ||
       t.snippet.toLowerCase().includes(q)
     );
   }, [threads, searchQuery]);
   const toggleMutation = useMutation({
-    mutationFn: ({ id, updates }: { id: string, updates: any }) =>
+    mutationFn: ({ id, updates }: { id: string, updates: any }) => 
       api(`/api/emails/${id}`, { method: 'PATCH', body: JSON.stringify(updates) }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['threads'] })
   });
-  const isMock = status?.mode === 'mock';
   return (
     <AppLayout>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="py-8 md:py-10 lg:py-12 space-y-10">
-          <header className="space-y-6 sticky top-0 bg-background/80 backdrop-blur-xl pt-2 pb-6 z-20">
-            {isMock && (
-              <div className="bg-yellow-100/50 border border-yellow-200 px-4 py-2 rounded-full flex items-center gap-2 text-[10px] font-black text-yellow-700 uppercase tracking-widest shadow-sm">
-                <CloudOff className="h-3 w-3" />
-                Running in Mock Mode - Limited Persistence
-              </div>
-            )}
-            <div className="relative group">
-              <Search className="absolute left-5 top-1/2 -translate-y-1/2 h-5 w-5 text-on-surface-variant opacity-30 group-focus-within:opacity-100 transition-opacity" />
+        <div className="py-8 md:py-10 lg:py-12">
+          <header className="space-y-6 mb-10">
+            <motion.div layout className="relative group">
+              <Search className="absolute left-5 top-1/2 -translate-y-1/2 h-5 w-5 text-on-surface-variant opacity-40 group-focus-within:text-primary group-focus-within:opacity-100 transition-all" />
               <Input
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search conversations..."
-                className="w-full h-16 pl-14 pr-12 rounded-m3-xl bg-surface-2 border-none focus-visible:ring-primary shadow-sm text-lg font-medium"
+                placeholder="Search your conversations..."
+                className="w-full h-14 pl-14 pr-6 rounded-2xl bg-surface-2 border-none focus-visible:ring-2 focus-visible:ring-primary shadow-sm text-base font-bold transition-all"
               />
-            </div>
+            </motion.div>
             <div className="flex items-center justify-between px-2">
               <div className="flex items-center gap-4">
-                <h1 className="text-4xl font-black text-on-surface capitalize tracking-tighter">
-                  {searchQuery ? 'Search' : folder}
-                </h1>
-                {isFetching && <Loader2 className="h-6 w-6 animate-spin text-primary opacity-50" />}
+                <h1 className="text-4xl font-black tracking-tighter capitalize">{searchQuery ? 'Search' : folder}</h1>
+                {isFetching && <Loader2 className="h-5 w-5 animate-spin text-primary opacity-50" />}
               </div>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => queryClient.invalidateQueries({ queryKey: ['threads'] })}
-                className="h-12 w-12 p-0 rounded-full bg-surface-1 shadow-sm hover:scale-105 active:scale-95 transition-all"
-              >
-                 <RefreshCw className="h-6 w-6" />
+              <Button variant="ghost" size="icon" onClick={() => queryClient.invalidateQueries({ queryKey: ['threads'] })} className="rounded-full bg-surface-1 shadow-sm">
+                <RefreshCw className="h-5 w-5" />
               </Button>
             </div>
           </header>
           <section className="space-y-px pb-32">
             {isLoading ? (
-              <div className="flex flex-col items-center justify-center py-40 gap-6">
-                <div className="h-16 w-16 border-4 border-primary/10 border-t-primary rounded-full animate-spin" />
-                <p className="text-xs font-black text-on-surface-variant tracking-[0.3em] uppercase opacity-30">Synchronizing Edge</p>
+              <div className="py-40 flex flex-col items-center gap-6">
+                <div className="h-12 w-12 border-4 border-primary/10 border-t-primary rounded-full animate-spin" />
+                <p className="text-[10px] font-black uppercase tracking-[0.3em] opacity-40">Syncing with Edge</p>
               </div>
             ) : error ? (
-              <div className="bg-destructive/10 border border-destructive/20 rounded-m3-xl p-8 text-center space-y-4">
-                <p className="text-destructive font-bold">Failed to load conversations</p>
-                <p className="text-sm text-on-surface-variant max-w-md mx-auto">
-                  {error instanceof Error ? error.message : "Database connection issue detected."}
-                </p>
-                <Button variant="outline" onClick={() => window.location.reload()}>Retry Connection</Button>
+              <div className="bg-destructive/10 border border-destructive/20 p-10 rounded-3xl text-center space-y-4">
+                <p className="font-black text-destructive">Network Connection Interrupted</p>
+                <Button variant="outline" onClick={() => window.location.reload()}>Retry Handshake</Button>
               </div>
             ) : filteredThreads.length > 0 ? (
               <AnimatePresence mode="popLayout">
@@ -185,17 +166,14 @@ export function HomePage() {
                     idx={idx}
                     density={density}
                     onArchive={(id) => {
-                      if (isMock) { toast.error("Archiving disabled in Mock Mode"); return; }
                       toggleMutation.mutate({ id, updates: { folder: 'trash' } });
-                      toast.info("Moved to trash");
+                      toast.info("Moved to trash", { action: { label: "Undo", onClick: () => {} } });
                     }}
                     onToggleRead={(id, cur) => {
-                      if (isMock) { toast.error("Status updates disabled in Mock Mode"); return; }
                       toggleMutation.mutate({ id, updates: { isRead: !cur } });
-                      toast.info(!cur ? "Marked read" : "Marked unread");
+                      toast.success(!cur ? "Marked read" : "Marked unread");
                     }}
                     onToggleStar={(id, cur) => {
-                      if (isMock) { toast.error("Starring disabled in Mock Mode"); return; }
                       toggleMutation.mutate({ id, updates: { isStarred: !cur } });
                     }}
                   />
@@ -203,21 +181,19 @@ export function HomePage() {
               </AnimatePresence>
             ) : (
               <motion.div
-                initial={{ opacity: 0, scale: 0.9 }}
+                initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
-                className="flex flex-col items-center justify-center py-48 text-center gap-8 bg-surface-1/50 rounded-m3-xl border-2 border-dashed border-surface-variant/20"
+                className="py-40 flex flex-col items-center text-center gap-8 bg-surface-1/50 rounded-[32px] border-2 border-dashed border-surface-variant/20"
               >
                 <div className="relative">
-                  <div className="h-28 w-28 bg-primary/5 rounded-full flex items-center justify-center">
-                    <InboxIcon className="h-14 w-14 text-primary/30" />
+                  <div className="h-32 w-32 bg-primary-container/20 rounded-full flex items-center justify-center">
+                    <InboxIcon className="h-16 w-16 text-primary/30" />
                   </div>
-                  <Sparkles className="absolute -top-2 -right-2 h-8 w-8 text-primary/40 animate-pulse" />
+                  <Sparkles className="absolute -top-2 -right-2 h-8 w-8 text-primary animate-pulse" />
                 </div>
                 <div className="space-y-2">
-                  <h3 className="text-2xl font-black tracking-tight text-on-surface">Inbox Zero</h3>
-                  <p className="text-sm text-on-surface-variant max-w-[280px] leading-relaxed">
-                    Everything is sorted. {isMock ? "Mock fallback data is being served." : "Enjoy the quiet."}
-                  </p>
+                  <h3 className="text-2xl font-black tracking-tight">Inbox Zero</h3>
+                  <p className="text-on-surface-variant text-sm max-w-xs font-medium">Everything is sorted. Take a break and enjoy the quiet.</p>
                 </div>
               </motion.div>
             )}
@@ -228,7 +204,7 @@ export function HomePage() {
         <motion.button
           whileHover={{ scale: 1.1, rotate: 5 }}
           whileTap={{ scale: 0.9 }}
-          className="m3-fab shadow-2xl shadow-primary/40 bg-primary text-white h-16 w-16 rounded-[24px]"
+          className="m3-fab shadow-primary/30"
           aria-label="Compose"
         >
           <Plus className="h-10 w-10" />

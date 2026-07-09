@@ -2,56 +2,6 @@ import { Hono } from "hono";
 import { ok, bad, notFound, Env } from './core-utils';
 import { FolderType, Email, EmailThread, User } from "@shared/types";
 import { MOCK_USERS, MOCK_EMAILS } from "@shared/mock-data";
-interface ThreadRow {
-  id: string;
-  subject: string;
-  last_message_at: number;
-  snippet: string;
-  unread_count: number;
-  is_starred: number;
-  folder: string;
-}
-interface EmailRow {
-  id: string;
-  thread_id: string;
-  from_name: string;
-  from_email: string;
-  to_json: string;
-  subject: string;
-  body: string;
-  snippet: string;
-  timestamp: number;
-  is_read: number;
-  is_starred: number;
-  folder: string;
-}
-interface UserRow {
-  id: string;
-  name: string;
-  email: string;
-  avatar_url: string | null;
-}
-const SIMULATED_SENDERS = [
-  { name: "GitHub", email: "noreply@github.com" },
-  { name: "Stripe", email: "support@stripe.com" },
-  { name: "Figma Team", email: "notifications@figma.com" },
-  { name: "Linear", email: "updates@linear.app" },
-  { name: "Discord", email: "no-reply@discord.com" }
-];
-const SIMULATED_SUBJECTS = [
-  "New sign-in to your account",
-  "Your weekly activity report is ready",
-  "Invoice for your latest subscription",
-  "You were mentioned in a comment",
-  "Action required: Verify your email address"
-];
-const SIMULATED_BODIES = [
-  "We detected a new sign-in to your AeroMail account from a new device. If this wasn't you, please secure your account immediately.",
-  "Here is a summary of your team's progress this week. You've completed 24 tasks and have 5 new notifications pending.",
-  "Your payment of $29.00 was successful. You can download your invoice from your billing dashboard at any time.",
-  "Hey! I just replied to your thread regarding the Phase 13 deployment. Let me know what you think about the container strategy.",
-  "Please click the button below to verify your email address and finish setting up your account."
-];
 export function userRoutes(app: Hono<{ Bindings: Env }>) {
   const getDB = (c: any): D1Database | undefined => c.env.EMAIL_DB;
   app.get('/api/status', (c) => {
@@ -64,229 +14,91 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
   });
   app.get('/api/init', async (c) => {
     const db = getDB(c);
-    if (!db) return ok(c, { initialized: true, message: "Running in Mock Mode (No D1 Binding Found)" });
+    if (!db) return ok(c, { initialized: true });
     try {
-      const check = await db.prepare("SELECT COUNT(*) as count FROM users").first() as { count: number } | null;
-      if (check && check.count > 0) return ok(c, { initialized: true, message: "Already seeded" });
-      const statements = [];
-      for (const u of MOCK_USERS) {
-        statements.push(db.prepare("INSERT INTO users (id, name, email, avatar_url) VALUES (?, ?, ?, ?)").bind(u.id, u.name, u.email, u.avatarUrl || null));
-      }
-      for (const e of MOCK_EMAILS) {
-        statements.push(db.prepare("INSERT OR IGNORE INTO threads (id, subject, last_message_at, snippet, unread_count, is_starred, folder) VALUES (?, ?, ?, ?, ?, ?, ?)").bind(e.threadId, e.subject, e.timestamp, e.snippet, e.isRead ? 0 : 1, e.isStarred ? 1 : 0, e.folder));
-        statements.push(db.prepare("INSERT INTO emails (id, thread_id, from_name, from_email, to_json, subject, body, snippet, timestamp, is_read, is_starred, folder) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").bind(e.id, e.threadId, e.from.name, e.from.email, JSON.stringify(e.to), e.subject, e.body, e.snippet, e.timestamp, e.isRead ? 1 : 0, e.isStarred ? 1 : 0, e.folder));
-      }
-      await db.batch(statements);
+      await db.batch([
+        db.prepare("INSERT INTO users (id, name, email) VALUES (?, ?, ?) ON CONFLICT DO NOTHING").bind(MOCK_USERS[0].id, MOCK_USERS[0].name, MOCK_USERS[0].email),
+        ...MOCK_EMAILS.map(e => db.prepare("INSERT INTO threads (id, subject, last_message_at, snippet, folder) VALUES (?, ?, ?, ?, ?) ON CONFLICT DO NOTHING").bind(e.threadId, e.subject, e.timestamp, e.snippet, e.folder)),
+        ...MOCK_EMAILS.map(e => db.prepare("INSERT INTO emails (id, thread_id, from_name, from_email, to_json, subject, body, snippet, timestamp, folder) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT DO NOTHING").bind(e.id, e.threadId, e.from.name, e.from.email, JSON.stringify(e.to), e.subject, e.body, e.snippet, e.timestamp, e.folder))
+      ]);
       return ok(c, { initialized: true });
-    } catch (e) {
-      return bad(c, 'Failed to initialize: ' + String(e));
-    }
+    } catch (e) { return bad(c, String(e)); }
   });
   app.post('/api/init/reset', async (c) => {
     const db = getDB(c);
-    if (!db) return bad(c, 'Reset failed: Database binding missing (Read-Only Mock Mode)');
-    try {
-      await db.batch([
-        db.prepare("DELETE FROM emails"),
-        db.prepare("DELETE FROM threads"),
-        db.prepare("DELETE FROM users"),
-        db.prepare("DELETE FROM domains"),
-        db.prepare("DELETE FROM user_domains")
-      ]);
-      return ok(c, { reset: true });
-    } catch (e) {
-      return bad(c, 'Reset failed: ' + String(e));
-    }
+    if (!db) return bad(c, "No DB");
+    await db.batch([db.prepare("DELETE FROM emails"), db.prepare("DELETE FROM threads")]);
+    return ok(c, { reset: true });
   });
   app.post('/api/simulate/inbound', async (c) => {
     const db = getDB(c);
-    if (!db) return bad(c, 'Simulation failed: Database binding missing (Read-Only Mock Mode)');
-    try {
-      const sender = SIMULATED_SENDERS[Math.floor(Math.random() * SIMULATED_SENDERS.length)];
-      const subject = SIMULATED_SUBJECTS[Math.floor(Math.random() * SIMULATED_SUBJECTS.length)];
-      const body = SIMULATED_BODIES[Math.floor(Math.random() * SIMULATED_BODIES.length)];
-      const emailId = crypto.randomUUID();
-      const threadId = crypto.randomUUID();
-      const timestamp = Date.now();
-      const snippet = body.slice(0, 100);
-      await db.batch([
-        db.prepare("INSERT INTO threads (id, subject, last_message_at, snippet, unread_count, is_starred, folder) VALUES (?, ?, ?, ?, 1, 0, 'inbox')").bind(threadId, subject, timestamp, snippet),
-        db.prepare("INSERT INTO emails (id, thread_id, from_name, from_email, to_json, subject, body, snippet, timestamp, is_read, is_starred, folder) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 'inbox')").bind(emailId, threadId, sender.name, sender.email, JSON.stringify([{ email: "user@aeromail.dev" }]), subject, body, snippet, timestamp)
-      ]);
-      return ok(c, { id: emailId, threadId });
-    } catch (e) {
-      return bad(c, 'Simulation failed: ' + String(e));
-    }
+    if (!db) return bad(c, "No DB");
+    const threadId = crypto.randomUUID();
+    const ts = Date.now();
+    const subject = "Urgent: Conversation Stream Testing";
+    const body1 = "Hey, I noticed the new UI looks amazing. Can we check if multiple messages group correctly?";
+    const body2 = "I just sent another one right after to test the 'same sender' visual grouping logic.";
+    await db.batch([
+      db.prepare("INSERT INTO threads (id, subject, last_message_at, snippet, unread_count, folder) VALUES (?, ?, ?, ?, 2, 'inbox')").bind(threadId, subject, ts, body2.slice(0, 50)),
+      db.prepare("INSERT INTO emails (id, thread_id, from_name, from_email, to_json, subject, body, snippet, timestamp, folder) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'inbox')").bind(crypto.randomUUID(), threadId, "Alex Rivera", "alex@example.com", "[]", subject, body1, body1.slice(0, 50), ts - 10000, 'inbox'),
+      db.prepare("INSERT INTO emails (id, thread_id, from_name, from_email, to_json, subject, body, snippet, timestamp, folder) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'inbox')").bind(crypto.randomUUID(), threadId, "Alex Rivera", "alex@example.com", "[]", subject, body2, body2.slice(0, 50), ts, 'inbox')
+    ]);
+    return ok(c, { threadId });
   });
   app.get('/api/emails', async (c) => {
     const db = getDB(c);
-    const folder = (c.req.query('folder') as FolderType) || 'inbox';
-    const limit = Math.min(Number(c.req.query('limit')) || 20, 100);
-    if (!db) {
-      const filtered = MOCK_EMAILS.filter((e: Email) => e.folder === folder || (folder === 'starred' && e.isStarred));
-      const threads: EmailThread[] = filtered.map((e: Email) => ({
-        id: e.threadId,
-        subject: e.subject,
-        lastMessageAt: e.timestamp,
-        snippet: e.snippet,
-        unreadCount: e.isRead ? 0 : 1,
-        isStarred: e.isStarred,
-        folder: e.folder,
-        participantNames: [e.from.name],
-        messages: [e]
-      }));
-      return ok(c, threads);
-    }
-    try {
-      const queryResult = await db.prepare(
-        "SELECT * FROM threads WHERE folder = ? OR (? = 'starred' AND is_starred = 1) ORDER BY last_message_at DESC LIMIT ?"
-      ).bind(folder, folder, limit).all();
-      const results = queryResult.results as unknown as ThreadRow[];
-      const threads: EmailThread[] = await Promise.all(results.map(async (t: ThreadRow) => {
-        const msgQueryResult = await db.prepare("SELECT * FROM emails WHERE thread_id = ? ORDER BY timestamp ASC").bind(t.id).all();
-        const messages = msgQueryResult.results as unknown as EmailRow[];
-        return {
-          id: t.id,
-          subject: t.subject,
-          lastMessageAt: t.last_message_at,
-          snippet: t.snippet,
-          unreadCount: t.unread_count,
-          isStarred: !!t.is_starred,
-          folder: t.folder as FolderType,
-          participantNames: Array.from(new Set(messages.map((m: EmailRow) => m.from_name))),
-          messages: messages.map((m: EmailRow) => ({
-            id: m.id,
-            threadId: m.thread_id,
-            from: { name: m.from_name, email: m.from_email },
-            to: JSON.parse(m.to_json),
-            subject: m.subject,
-            body: m.body,
-            snippet: m.snippet,
-            timestamp: m.timestamp,
-            isRead: !!m.is_read,
-            isStarred: !!m.is_starred,
-            folder: m.folder as FolderType
-          }))
-        };
-      }));
-      return ok(c, threads);
-    } catch (e) {
-      return bad(c, 'Failed to fetch mailbox');
-    }
+    const folder = c.req.query('folder') || 'inbox';
+    if (!db) return ok(c, []);
+    const { results } = await db.prepare("SELECT * FROM threads WHERE folder = ? OR (? = 'starred' AND is_starred = 1) ORDER BY last_message_at DESC").bind(folder, folder).all();
+    const threads = await Promise.all(results.map(async (t: any) => {
+      const msgs = await db.prepare("SELECT * FROM emails WHERE thread_id = ? ORDER BY timestamp ASC").bind(t.id).all();
+      return { ...t, lastMessageAt: t.last_message_at, unreadCount: t.unread_count, isStarred: !!t.is_starred, participantNames: Array.from(new Set(msgs.results.map((m: any) => m.from_name))), messages: msgs.results.map((m: any) => ({ ...m, from: { name: m.from_name, email: m.from_email }, to: JSON.parse(m.to_json) })) };
+    }));
+    return ok(c, threads);
   });
   app.get('/api/emails/:id', async (c) => {
     const db = getDB(c);
     const id = c.req.param('id');
-    if (!db) {
-      const email = MOCK_EMAILS.find((e: Email) => e.id === id);
-      if (!email) return notFound(c, 'Email not found');
-      return ok(c, { ...email, thread: { id: email.threadId, subject: email.subject, messages: [email], unreadCount: 0, isStarred: email.isStarred, folder: email.folder, lastMessageAt: email.timestamp, participantNames: [email.from.name] } });
-    }
-    try {
-      const email = await db.prepare("SELECT * FROM emails WHERE id = ?").bind(id).first() as EmailRow | null;
-      if (!email) return notFound(c, 'Email not found');
-      const threadRecord = await db.prepare("SELECT * FROM threads WHERE id = ?").bind(email.thread_id).first() as ThreadRow | null;
-      if (!threadRecord) return notFound(c, 'Thread not found');
-      const allMsgsResult = await db.prepare("SELECT * FROM emails WHERE thread_id = ? ORDER BY timestamp ASC").bind(email.thread_id).all();
-      const allMsgs = allMsgsResult.results as unknown as EmailRow[];
-      const thread: EmailThread = {
-        id: threadRecord.id,
-        subject: threadRecord.subject,
-        lastMessageAt: threadRecord.last_message_at,
-        snippet: threadRecord.snippet,
-        unreadCount: threadRecord.unread_count,
-        isStarred: !!threadRecord.is_starred,
-        folder: threadRecord.folder as FolderType,
-        participantNames: Array.from(new Set(allMsgs.map((m: EmailRow) => m.from_name))),
-        messages: allMsgs.map((m: EmailRow) => ({
-          id: m.id,
-          threadId: m.thread_id,
-          from: { name: m.from_name, email: m.from_email },
-          to: JSON.parse(m.to_json),
-          subject: m.subject,
-          body: m.body,
-          snippet: m.snippet,
-          timestamp: m.timestamp,
-          isRead: !!m.is_read,
-          isStarred: !!m.is_starred,
-          folder: m.folder as FolderType
-        }))
-      } as any;
-      return ok(c, { ...email, thread });
-    } catch (e) {
-      return bad(c, 'Database error');
-    }
-  });
-  app.post('/api/threads/:id/read', async (c) => {
-    const db = getDB(c);
-    const id = c.req.param('id');
-    if (!db) return ok(c, { success: true });
-    try {
-      await db.batch([
-        db.prepare("UPDATE emails SET is_read = 1 WHERE thread_id = ?").bind(id),
-        db.prepare("UPDATE threads SET unread_count = 0 WHERE id = ?").bind(id)
-      ]);
-      return ok(c, { success: true });
-    } catch (e) {
-      return bad(c, 'Failed to update read status');
-    }
+    if (!db) return notFound(c);
+    const email = await db.prepare("SELECT * FROM emails WHERE id = ?").bind(id).first() as any;
+    if (!email) return notFound(c);
+    const threadRecord = await db.prepare("SELECT * FROM threads WHERE id = ?").bind(email.thread_id).first() as any;
+    const msgs = await db.prepare("SELECT * FROM emails WHERE thread_id = ? ORDER BY timestamp ASC").bind(email.thread_id).all();
+    const thread = { ...threadRecord, lastMessageAt: threadRecord.last_message_at, isStarred: !!threadRecord.is_starred, unreadCount: threadRecord.unread_count, messages: msgs.results.map((m: any) => ({ ...m, from: { name: m.from_name, email: m.from_email }, to: JSON.parse(m.to_json) })) };
+    return ok(c, { ...email, from: { name: email.from_name, email: email.from_email }, to: JSON.parse(email.to_json), thread });
   });
   app.patch('/api/emails/:id', async (c) => {
     const db = getDB(c);
+    if (!db) return bad(c, "No DB");
     const id = c.req.param('id');
-    const updates = await c.req.json();
-    if (!db) return bad(c, 'Update failed: Database binding missing (Read-Only Mock Mode)');
-    try {
-      const email = await db.prepare("SELECT * FROM emails WHERE id = ?").bind(id).first() as EmailRow | null;
-      if (!email) return notFound(c, 'Email not found');
-      const setClauses: string[] = [];
-      const params: any[] = [];
-      for (const [key, val] of Object.entries(updates)) {
-        if (key === 'isRead') { setClauses.push("is_read = ?"); params.push(val ? 1 : 0); }
-        else if (key === 'isStarred') { setClauses.push("is_starred = ?"); params.push(val ? 1 : 0); }
-        else if (key === 'folder') { setClauses.push("folder = ?"); params.push(val); }
-      }
-      if (setClauses.length > 0) {
-        params.push(id);
-        await db.prepare(`UPDATE emails SET ${setClauses.join(', ')} WHERE id = ?`).bind(...params).run();
-        const msgsResult = await db.prepare("SELECT is_read, is_starred FROM emails WHERE thread_id = ?").bind(email.thread_id).all();
-        const msgs = msgsResult.results as unknown as { is_read: number; is_starred: number }[];
-        const unreadCount = msgs.filter((m: any) => !m.is_read).length;
-        const isStarred = msgs.some((m: any) => m.is_starred) ? 1 : 0;
-        await db.prepare("UPDATE threads SET unread_count = ?, is_starred = ? WHERE id = ?").bind(unreadCount, isStarred, email.thread_id).run();
-      }
-      return ok(c, { success: true });
-    } catch (e) {
-      return bad(c, 'Update failed');
-    }
+    const updates = await c.req.json() as any;
+    if (updates.folder) await db.prepare("UPDATE emails SET folder = ? WHERE id = ?").bind(updates.folder, id).run();
+    if (updates.isRead !== undefined) await db.prepare("UPDATE emails SET is_read = ? WHERE id = ?").bind(updates.isRead ? 1 : 0, id).run();
+    if (updates.isStarred !== undefined) await db.prepare("UPDATE emails SET is_starred = ? WHERE id = ?").bind(updates.isStarred ? 1 : 0, id).run();
+    return ok(c, { success: true });
   });
   app.post('/api/emails/send', async (c) => {
     const db = getDB(c);
-    if (!db) return bad(c, 'Send failed: Database binding missing (Read-Only Mock Mode)');
+    if (!db) return bad(c, "No DB");
     const { to, subject, body, threadId } = await c.req.json();
-    const emailId = crypto.randomUUID();
-    const targetThreadId = threadId || crypto.randomUUID();
-    const timestamp = Date.now();
-    const snippet = body.slice(0, 100);
-    try {
-      await db.batch([
-        db.prepare("INSERT INTO threads (id, subject, last_message_at, snippet, unread_count, is_starred, folder) VALUES (?, ?, ?, ?, 0, 0, 'sent') ON CONFLICT(id) DO UPDATE SET last_message_at = excluded.last_message_at, snippet = excluded.snippet").bind(targetThreadId, subject, timestamp, snippet),
-        db.prepare("INSERT INTO emails (id, thread_id, from_name, from_email, to_json, subject, body, snippet, timestamp, is_read, is_starred, folder) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0, 'sent')").bind(emailId, targetThreadId, "Current User", "user@aeromail.dev", JSON.stringify([{email: to}]), subject, body, snippet, timestamp)
-      ]);
-      return ok(c, { id: emailId });
-    } catch (e) {
-      return bad(c, 'Failed to send');
-    }
+    const id = crypto.randomUUID();
+    const tid = threadId || crypto.randomUUID();
+    const ts = Date.now();
+    await db.batch([
+      db.prepare("INSERT INTO threads (id, subject, last_message_at, snippet, folder) VALUES (?, ?, ?, ?, 'sent') ON CONFLICT(id) DO UPDATE SET last_message_at = excluded.last_message_at, snippet = excluded.snippet").bind(tid, subject, ts, body.slice(0, 50)),
+      db.prepare("INSERT INTO emails (id, thread_id, from_name, from_email, to_json, subject, body, snippet, timestamp, folder, is_read) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'sent', 1)").bind(id, tid, "Aero User", "user@aeromail.dev", JSON.stringify([{ email: to }]), subject, body, body.slice(0, 50), ts)
+    ]);
+    return ok(c, { id });
   });
-  app.get('/api/me', async (c) => {
+  app.post('/api/threads/:id/read', async (c) => {
     const db = getDB(c);
-    if (!db) return ok(c, MOCK_USERS[0]);
-    try {
-      const user = await db.prepare("SELECT * FROM users LIMIT 1").first() as UserRow | null;
-      if (!user) return ok(c, MOCK_USERS[0]);
-      return ok(c, { id: user.id, name: user.name, email: user.email, avatar_url: user.avatar_url });
-    } catch (e) {
-      return ok(c, MOCK_USERS[0]);
-    }
+    if (!db) return bad(c, "No DB");
+    const tid = c.req.param('id');
+    await db.batch([
+      db.prepare("UPDATE threads SET unread_count = 0 WHERE id = ?").bind(tid),
+      db.prepare("UPDATE emails SET is_read = 1 WHERE thread_id = ?").bind(tid)
+    ]);
+    return ok(c, { success: true });
   });
+  app.get('/api/me', (c) => ok(c, MOCK_USERS[0]));
 }

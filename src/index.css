@@ -3,7 +3,7 @@
 @tailwind utilities;
 @layer base {
   :root {
-    /* M3 Light Tonal Palette (Approximate HSL for AeroMail Violet) */
+    /* M3 Light Tonal Palette (AeroMail Violet) */
     --background: 264 40% 98%;
     --foreground: 264 30% 10%;
     --primary: 264 50% 48%;
@@ -59,43 +59,31 @@
     --muted-foreground: 264 10% 70%;
     --border: 264 10% 25%;
   }
-  /* Density Overrides */
-  .density-compact {
-    --radius: 0.5rem;
-    --spacing-unit: 0.5rem;
-  }
 }
 @layer base {
   * {
     @apply border-border;
   }
   body {
-    @apply bg-background text-foreground font-sans antialiased;
+    @apply bg-background text-foreground font-sans antialiased selection:bg-primary/20;
+    padding-bottom: env(safe-area-inset-bottom);
+    padding-top: env(safe-area-inset-top);
   }
 }
 .m3-card {
-  @apply bg-surface-1 rounded-m3-lg p-[var(--spacing-unit)] transition-colors hover:bg-surface-2;
+  @apply bg-surface-1 rounded-m3-lg p-[var(--spacing-unit)] transition-all duration-300 hover:bg-surface-2 active:scale-[0.98] cubic-bezier-[0.4,0,0.2,1];
 }
 .m3-fab {
-  @apply fixed bottom-6 right-6 h-14 w-14 rounded-m3-lg bg-primary-container text-primary-on-container shadow-lg flex items-center justify-center transition-transform active:scale-90 hover:scale-105 z-30;
-}
-.density-compact .m3-fab {
-  @apply h-12 w-12 bottom-4 right-4;
+  @apply fixed bottom-8 right-8 h-16 w-16 rounded-[28px] bg-primary text-primary-foreground shadow-2xl flex items-center justify-center transition-all duration-300 hover:scale-110 active:scale-90 z-30 cubic-bezier-[0.4,0,0.2,1];
 }
 .prose-email {
-  @apply text-surface-on leading-relaxed max-w-none whitespace-pre-wrap;
+  @apply text-on-surface leading-relaxed max-w-none whitespace-pre-wrap font-sans text-base;
 }
 .density-compact .prose-email {
-  @apply text-sm leading-normal;
+  @apply text-sm leading-snug;
 }
-.prose-email p {
-  @apply mb-4;
-}
-.prose-email a {
-  @apply text-primary underline;
-}
-.prose-email blockquote {
-  @apply border-l-4 border-surface-variant pl-4 italic text-surface-on-variant;
+.m3-chip {
+  @apply inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-secondary-container text-on-secondary-container text-xs font-bold transition-all hover:bg-secondary-container/80 active:scale-95;
 }
 .custom-scrollbar {
   scrollbar-width: thin;
@@ -104,17 +92,18 @@
 .custom-scrollbar::-webkit-scrollbar {
   width: 6px;
 }
-.custom-scrollbar::-webkit-scrollbar-track {
-  background: transparent;
-}
 .custom-scrollbar::-webkit-scrollbar-thumb {
-  background-color: hsl(var(--surface-variant));
-  border-radius: 20px;
+  @apply bg-surface-variant rounded-full;
 }
-@keyframes swipe-reveal {
-  from { opacity: 0; transform: scale(0.8); }
-  to { opacity: 1; transform: scale(1); }
+.m3-surface-tonal-1 { @apply bg-surface-1; }
+.m3-surface-tonal-2 { @apply bg-surface-2; }
+.m3-surface-tonal-3 { @apply bg-surface-3; }
+.m3-surface-tonal-4 { @apply bg-surface-4; }
+.m3-surface-tonal-5 { @apply bg-surface-5; }
+@keyframes m3-spring-slide {
+  from { transform: translateY(20px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
 }
-.swipe-action-icon {
-  animation: swipe-reveal 0.2s ease-out;
+.animate-m3-slide {
+  animation: m3-spring-slide 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
 }
