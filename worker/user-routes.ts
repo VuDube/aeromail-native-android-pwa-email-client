@@ -9,7 +9,7 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
       cf_token_ready: !!c.env.CF_API_TOKEN,
       kv_ready: !!c.env.TOKENS,
       db_ready: !!c.env.EMAIL_DB,
-      version: '1.6.0-final'
+      version: '1.7.0-final'
     });
   });
   app.get('/api/domains', async (c) => {
@@ -122,10 +122,10 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
     const db = c.env.EMAIL_DB;
     const folder = c.req.query('folder') || 'inbox';
     const { results } = await db.prepare(`
-      SELECT t.*, 
+      SELECT t.*,
       (SELECT GROUP_CONCAT(from_name, ', ') FROM (SELECT DISTINCT from_name FROM emails WHERE thread_id = t.id)) as participantNames
-      FROM threads t 
-      WHERE folder = ? OR (? = 'starred' AND is_starred = 1) 
+      FROM threads t
+      WHERE folder = ? OR (? = 'starred' AND is_starred = 1)
       ORDER BY last_message_at DESC
     `).bind(folder, folder).all();
     const formatted = results.map((r: any) => ({
@@ -160,21 +160,39 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
   });
   app.patch('/api/threads/:id', async (c) => {
     const db = c.env.EMAIL_DB;
-    const id = c.req.param('id');
+    const id = c.param('id');
     const { folder, isStarred, isRead } = await c.req.json();
     const updates: string[] = [];
     const params: any[] = [];
-    if (folder !== undefined) { updates.push("folder = ?"); params.push(folder); }
-    if (isStarred !== undefined) { updates.push("is_starred = ?"); params.push(isStarred ? 1 : 0); }
-    if (isRead === true) { updates.push("unread_count = 0"); }
+    // Batch updates for both threads and emails tables
+    const batchOps = [];
+    if (folder !== undefined) { 
+      updates.push("folder = ?"); 
+      params.push(folder); 
+      batchOps.push(db.prepare("UPDATE emails SET folder = ? WHERE thread_id = ?").bind(folder, id));
+    }
+    if (isStarred !== undefined) { 
+      updates.push("is_starred = ?"); 
+      params.push(isStarred ? 1 : 0); 
+    }
+    if (isRead !== undefined) {
+      updates.push("unread_count = ?");
+      params.push(isRead ? 0 : 1); // Mock behavior: unread_count is simplified
+      batchOps.push(db.prepare("UPDATE emails SET is_read = ? WHERE thread_id = ?").bind(isRead ? 1 : 0, id));
+    }
     if (updates.length > 0) {
       params.push(id);
-      await db.prepare(`UPDATE threads SET ${updates.join(", ")} WHERE id = ?`).bind(...params).run();
+      batchOps.unshift(db.prepare(`UPDATE threads SET ${updates.join(", ")} WHERE id = ?`).bind(...params));
     }
-    if (isRead === true) {
-      await db.prepare("UPDATE emails SET is_read = 1 WHERE thread_id = ?").bind(id).run();
+    try {
+      if (batchOps.length > 0) {
+        await db.batch(batchOps);
+      }
+      return ok(c, { success: true });
+    } catch (e: any) {
+      console.error("[D1 ERROR]", e.message);
+      return internalError(c, "Failed to update thread state");
     }
-    return ok(c, { success: true });
   });
   app.post('/api/simulate/inbound', async (c) => {
     const db = c.env.EMAIL_DB;
