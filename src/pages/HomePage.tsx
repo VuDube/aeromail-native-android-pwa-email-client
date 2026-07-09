@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, forwardRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useParams, Link } from 'react-router-dom';
 import { api } from '@/lib/api-client';
@@ -22,77 +22,80 @@ interface SwipeableThreadCardProps {
   onToggleRead: (id: string, current: boolean) => void;
   onToggleStar: (id: string, current: boolean) => void;
 }
-function SwipeableThreadCard({ thread, idx, density, onArchive, onToggleRead, onToggleStar }: SwipeableThreadCardProps) {
-  const x = useMotionValue(0);
-  const opacity = useTransform(x, [-150, 0, 150], [0.6, 1, 0.6]);
-  const isRead = thread.unreadCount === 0;
-  const latestMessageId = thread.messages[thread.messages.length - 1]?.id;
-  const handlers = useSwipeable({
-    onSwiping: (e) => x.set(e.deltaX * 0.8),
-    onSwipedLeft: (e) => {
-      if (Math.abs(e.deltaX) > 100) onArchive(latestMessageId);
-      x.set(0);
-    },
-    onSwipedRight: (e) => {
-      if (Math.abs(e.deltaX) > 100) onToggleRead(latestMessageId, isRead);
-      x.set(0);
-    },
-    onSwiped: () => x.set(0),
-    trackMouse: true,
-    preventScrollOnSwipe: true,
-  });
-  return (
-    <div className="relative overflow-hidden mb-1 rounded-m3-lg group">
-      <div className="absolute inset-0 flex items-center justify-between px-6 z-0 pointer-events-none">
-        <MailOpen className="h-6 w-6 text-green-500 opacity-40" />
-        <Archive className="h-6 w-6 text-blue-500 opacity-40" />
-      </div>
-      <motion.div
-        {...handlers}
-        style={{ x, opacity }}
-        layout
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: Math.min(idx * 0.02, 0.2) }}
-        className={cn(
-          "relative z-10 flex items-start gap-4 cursor-pointer transition-all border-b border-surface-variant/20",
-          density === 'compact' ? "p-3" : "p-5",
-          isRead ? 'bg-background hover:bg-surface-1' : 'bg-primary/5 hover:bg-primary/10 shadow-sm border-l-4 border-l-primary'
-        )}
-      >
-        <div className="shrink-0 pt-1 flex flex-col items-center gap-3">
-          <Avatar className={cn(density === 'compact' ? "h-9 w-9" : "h-12 w-12", "ring-2 ring-background shadow-sm")}>
-            <AvatarFallback className="bg-primary/10 text-primary text-sm font-black uppercase">
-              {thread.participantNames[0]?.charAt(0) || 'A'}
-            </AvatarFallback>
-          </Avatar>
-          <button
-            onClick={(e) => { e.preventDefault(); e.stopPropagation(); onToggleStar(latestMessageId, thread.isStarred); }}
-            className="z-20 p-1 rounded-full hover:bg-surface-variant/20 transition-colors"
-          >
-            <Star className={cn("h-5 w-5 transition-all", thread.isStarred ? 'fill-yellow-500 text-yellow-500 scale-110' : 'text-on-surface-variant/20')} />
-          </button>
+const SwipeableThreadCard = forwardRef<HTMLDivElement, SwipeableThreadCardProps>(
+  ({ thread, idx, density, onArchive, onToggleRead, onToggleStar }, ref) => {
+    const x = useMotionValue(0);
+    const opacity = useTransform(x, [-150, 0, 150], [0.6, 1, 0.6]);
+    const isRead = thread.unreadCount === 0;
+    const latestMessageId = thread.messages[thread.messages.length - 1]?.id;
+    const handlers = useSwipeable({
+      onSwiping: (e) => x.set(e.deltaX * 0.8),
+      onSwipedLeft: (e) => {
+        if (Math.abs(e.deltaX) > 100) onArchive(latestMessageId);
+        x.set(0);
+      },
+      onSwipedRight: (e) => {
+        if (Math.abs(e.deltaX) > 100) onToggleRead(latestMessageId, isRead);
+        x.set(0);
+      },
+      onSwiped: () => x.set(0),
+      trackMouse: true,
+      preventScrollOnSwipe: true,
+    });
+    return (
+      <div ref={ref} className="relative overflow-hidden mb-1 rounded-m3-lg group">
+        <div className="absolute inset-0 flex items-center justify-between px-6 z-0 pointer-events-none">
+          <MailOpen className="h-6 w-6 text-green-500 opacity-40" />
+          <Archive className="h-6 w-6 text-blue-500 opacity-40" />
         </div>
-        <Link to={`/thread/${latestMessageId}`} className="flex-1 min-w-0">
-          <div className="flex items-center justify-between mb-1">
-            <span className={cn("truncate text-sm tracking-tight", !isRead ? 'font-black text-on-surface' : 'font-semibold text-on-surface-variant opacity-70')}>
-              {thread.participantNames.join(', ')}
-            </span>
-            <span className="text-[11px] font-bold text-on-surface-variant opacity-50 shrink-0">
-              {format(thread.lastMessageAt, 'HH:mm')}
-            </span>
+        <motion.div
+          {...handlers}
+          style={{ x, opacity }}
+          layout
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: Math.min(idx * 0.02, 0.2) }}
+          className={cn(
+            "relative z-10 flex items-start gap-4 cursor-pointer transition-all border-b border-surface-variant/20",
+            density === 'compact' ? "p-3" : "p-5",
+            isRead ? 'bg-background hover:bg-surface-1' : 'bg-primary/5 hover:bg-primary/10 shadow-sm border-l-4 border-l-primary'
+          )}
+        >
+          <div className="shrink-0 pt-1 flex flex-col items-center gap-3">
+            <Avatar className={cn(density === 'compact' ? "h-9 w-9" : "h-12 w-12", "ring-2 ring-background shadow-sm")}>
+              <AvatarFallback className="bg-primary/10 text-primary text-sm font-black uppercase">
+                {thread.participantNames[0]?.charAt(0) || 'A'}
+              </AvatarFallback>
+            </Avatar>
+            <button
+              onClick={(e) => { e.preventDefault(); e.stopPropagation(); onToggleStar(latestMessageId, thread.isStarred); }}
+              className="z-20 p-1 rounded-full hover:bg-surface-variant/20 transition-colors"
+            >
+              <Star className={cn("h-5 w-5 transition-all", thread.isStarred ? 'fill-yellow-500 text-yellow-500 scale-110' : 'text-on-surface-variant/20')} />
+            </button>
           </div>
-          <h3 className={cn("truncate mb-1 text-sm font-bold tracking-tight", !isRead ? 'text-on-surface' : 'text-on-surface-variant opacity-80')}>
-            {thread.subject}
-          </h3>
-          <p className="text-xs text-on-surface-variant opacity-60 line-clamp-1 leading-relaxed">
-            {thread.snippet}
-          </p>
-        </Link>
-      </motion.div>
-    </div>
-  );
-}
+          <Link to={`/thread/${latestMessageId}`} className="flex-1 min-w-0">
+            <div className="flex items-center justify-between mb-1">
+              <span className={cn("truncate text-sm tracking-tight", !isRead ? 'font-black text-on-surface' : 'font-semibold text-on-surface-variant opacity-70')}>
+                {thread.participantNames.join(', ')}
+              </span>
+              <span className="text-[11px] font-bold text-on-surface-variant opacity-50 shrink-0">
+                {format(thread.lastMessageAt, 'HH:mm')}
+              </span>
+            </div>
+            <h3 className={cn("truncate mb-1 text-sm font-bold tracking-tight", !isRead ? 'text-on-surface' : 'text-on-surface-variant opacity-80')}>
+              {thread.subject}
+            </h3>
+            <p className="text-xs text-on-surface-variant opacity-60 line-clamp-1 leading-relaxed">
+              {thread.snippet}
+            </p>
+          </Link>
+        </motion.div>
+      </div>
+    );
+  }
+);
+SwipeableThreadCard.displayName = 'SwipeableThreadCard';
 export function HomePage() {
   const queryClient = useQueryClient();
   const { folder = 'inbox' } = useParams<{ folder: string }>();
@@ -110,14 +113,14 @@ export function HomePage() {
     if (!threads) return [];
     if (!searchQuery.trim()) return threads;
     const q = searchQuery.toLowerCase();
-    return threads.filter(t => 
-      t.subject.toLowerCase().includes(q) || 
-      t.participantNames.some(p => p.toLowerCase().includes(q)) || 
+    return threads.filter(t =>
+      t.subject.toLowerCase().includes(q) ||
+      t.participantNames.some(p => p.toLowerCase().includes(q)) ||
       t.snippet.toLowerCase().includes(q)
     );
   }, [threads, searchQuery]);
   const toggleMutation = useMutation({
-    mutationFn: ({ id, updates }: { id: string, updates: any }) => 
+    mutationFn: ({ id, updates }: { id: string, updates: any }) =>
       api(`/api/emails/${id}`, { method: 'PATCH', body: JSON.stringify(updates) }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['threads'] })
   });

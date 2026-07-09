@@ -1,11 +1,7 @@
 import { Hono } from "hono";
-import { ok, bad, notFound } from './core-utils';
+import { ok, bad, notFound, Env } from './core-utils';
 import { FolderType, Email, EmailThread, User } from "@shared/types";
 import { MOCK_USERS, MOCK_EMAILS } from "@shared/mock-data";
-export interface Env {
-  EMAIL_DB?: D1Database;
-  TOKENS: KVNamespace;
-}
 interface ThreadRow {
   id: string;
   subject: string;
@@ -204,7 +200,6 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
         participantNames: Array.from(new Set(allMsgs.map((m: EmailRow) => m.from_name))),
         messages: allMsgs.map((m: EmailRow) => ({
           id: m.id,
-          thread_id: m.thread_id,
           threadId: m.thread_id,
           from: { name: m.from_name, email: m.from_email },
           to: JSON.parse(m.to_json),
