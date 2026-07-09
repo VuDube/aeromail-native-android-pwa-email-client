@@ -5,7 +5,7 @@ import { api } from '@/lib/api-client';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { EmailThread, FolderType } from '@shared/types';
 import { format } from 'date-fns';
-import { Plus, Search, Star, Loader2, RefreshCw, Archive, MailOpen, Inbox as InboxIcon } from 'lucide-react';
+import { Plus, Search, Star, Loader2, RefreshCw, Archive, MailOpen, Inbox as InboxIcon, Sparkles } from 'lucide-react';
 import { motion, AnimatePresence, useMotionValue, useTransform } from 'framer-motion';
 import { useSwipeable } from 'react-swipeable';
 import { Input } from '@/components/ui/input';
@@ -24,9 +24,7 @@ interface SwipeableThreadCardProps {
 }
 function SwipeableThreadCard({ thread, idx, density, onArchive, onToggleRead, onToggleStar }: SwipeableThreadCardProps) {
   const x = useMotionValue(0);
-  const opacity = useTransform(x, [-150, 0, 150], [0.5, 1, 0.5]);
-  const bgColorLeft = useTransform(x, [0, 100], ['rgba(34, 197, 94, 0)', 'rgba(34, 197, 94, 0.2)']);
-  const bgColorRight = useTransform(x, [-100, 0], ['rgba(59, 130, 246, 0.2)', 'rgba(59, 130, 246, 0)']);
+  const opacity = useTransform(x, [-150, 0, 150], [0.6, 1, 0.6]);
   const isRead = thread.unreadCount === 0;
   const latestMessageId = thread.messages[thread.messages.length - 1]?.id;
   const handlers = useSwipeable({
@@ -45,12 +43,10 @@ function SwipeableThreadCard({ thread, idx, density, onArchive, onToggleRead, on
   });
   return (
     <div className="relative overflow-hidden mb-1 rounded-m3-lg group">
-      <motion.div style={{ backgroundColor: bgColorLeft }} className="absolute inset-y-0 left-0 w-full flex items-center px-6 pointer-events-none z-0">
-        <MailOpen className="h-6 w-6 text-green-600 swipe-action-icon" />
-      </motion.div>
-      <motion.div style={{ backgroundColor: bgColorRight }} className="absolute inset-y-0 right-0 w-full flex items-center justify-end px-6 pointer-events-none z-0">
-        <Archive className="h-6 w-6 text-blue-600 swipe-action-icon" />
-      </motion.div>
+      <div className="absolute inset-0 flex items-center justify-between px-6 z-0 pointer-events-none">
+        <MailOpen className="h-6 w-6 text-green-500 opacity-40" />
+        <Archive className="h-6 w-6 text-blue-500 opacity-40" />
+      </div>
       <motion.div
         {...handlers}
         style={{ x, opacity }}
@@ -59,56 +55,37 @@ function SwipeableThreadCard({ thread, idx, density, onArchive, onToggleRead, on
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: Math.min(idx * 0.02, 0.2) }}
         className={cn(
-          "relative z-10 flex items-start gap-3 cursor-pointer transition-colors border-b border-surface-variant/30",
-          density === 'compact' ? "p-2" : "p-4",
-          isRead ? 'bg-background' : 'bg-surface-2 shadow-sm'
+          "relative z-10 flex items-start gap-4 cursor-pointer transition-all border-b border-surface-variant/20",
+          density === 'compact' ? "p-3" : "p-5",
+          isRead ? 'bg-background hover:bg-surface-1' : 'bg-primary/5 hover:bg-primary/10 shadow-sm border-l-4 border-l-primary'
         )}
       >
-        <div className="shrink-0 pt-1 flex flex-col items-center gap-2">
-          <Avatar className={cn(density === 'compact' ? "h-8 w-8" : "h-10 w-10")}>
-            <AvatarFallback className="bg-primary/10 text-primary text-xs font-bold">
+        <div className="shrink-0 pt-1 flex flex-col items-center gap-3">
+          <Avatar className={cn(density === 'compact' ? "h-9 w-9" : "h-12 w-12", "ring-2 ring-background shadow-sm")}>
+            <AvatarFallback className="bg-primary/10 text-primary text-sm font-black">
               {thread.participantNames[0]?.charAt(0) || 'A'}
             </AvatarFallback>
           </Avatar>
           <button
-            onClick={(e) => {
-              e.preventDefault(); e.stopPropagation();
-              onToggleStar(latestMessageId, thread.isStarred);
-            }}
-            className="z-20 p-1"
+            onClick={(e) => { e.preventDefault(); e.stopPropagation(); onToggleStar(latestMessageId, thread.isStarred); }}
+            className="z-20 p-1 rounded-full hover:bg-surface-variant/20 transition-colors"
           >
-            <Star className={cn(
-              "h-4 w-4 transition-all duration-200",
-              thread.isStarred ? 'fill-yellow-500 text-yellow-500 scale-110' : 'text-surface-on-variant/30'
-            )} />
+            <Star className={cn("h-5 w-5 transition-all", thread.isStarred ? 'fill-yellow-500 text-yellow-500 scale-110' : 'text-on-surface-variant/20')} />
           </button>
         </div>
         <Link to={`/thread/${latestMessageId}`} className="flex-1 min-w-0">
-          <div className="flex items-center justify-between gap-2 mb-0.5">
-            <div className="flex items-center gap-2 truncate">
-               <span className={cn(
-                  "truncate text-sm",
-                  !isRead ? 'font-bold text-surface-on' : 'font-medium text-surface-on-variant'
-                )}>
-                  {thread.participantNames.join(', ')}
-                </span>
-                {thread.messages.length > 1 && (
-                  <span className="text-[10px] bg-surface-variant/50 px-1.5 rounded-full font-bold text-on-surface-variant">
-                    {thread.messages.length}
-                  </span>
-                )}
-            </div>
-            <span className="text-[10px] text-surface-on-variant shrink-0 font-medium">
-              {format(thread.lastMessageAt, 'MMM d')}
+          <div className="flex items-center justify-between mb-1">
+            <span className={cn("truncate text-sm tracking-tight", !isRead ? 'font-black text-on-surface' : 'font-semibold text-on-surface-variant opacity-70')}>
+              {thread.participantNames.join(', ')}
+            </span>
+            <span className="text-[11px] font-bold text-on-surface-variant opacity-50 shrink-0">
+              {format(thread.lastMessageAt, 'HH:mm')}
             </span>
           </div>
-          <h3 className={cn(
-            "truncate mb-0.5 text-sm",
-            !isRead ? 'font-semibold text-surface-on' : 'text-surface-on-variant/80'
-          )}>
+          <h3 className={cn("truncate mb-1 text-sm font-bold tracking-tight", !isRead ? 'text-on-surface' : 'text-on-surface-variant opacity-80')}>
             {thread.subject}
           </h3>
-          <p className="text-xs text-surface-on-variant/60 line-clamp-1">
+          <p className="text-xs text-on-surface-variant opacity-60 line-clamp-1 leading-relaxed">
             {thread.snippet}
           </p>
         </Link>
@@ -129,64 +106,48 @@ export function HomePage() {
     if (!threads) return [];
     if (!searchQuery.trim()) return threads;
     const q = searchQuery.toLowerCase();
-    return threads.filter(t =>
-      t.subject.toLowerCase().includes(q) ||
-      t.participantNames.some(p => p.toLowerCase().includes(q)) ||
-      t.snippet.toLowerCase().includes(q)
-    );
+    return threads.filter(t => t.subject.toLowerCase().includes(q) || t.participantNames.some(p => p.toLowerCase().includes(q)) || t.snippet.toLowerCase().includes(q));
   }, [threads, searchQuery]);
   const toggleMutation = useMutation({
-    mutationFn: ({ id, updates }: { id: string, updates: any }) =>
-      api(`/api/emails/${id}`, { method: 'PATCH', body: JSON.stringify(updates) }),
+    mutationFn: ({ id, updates }: { id: string, updates: any }) => api(`/api/emails/${id}`, { method: 'PATCH', body: JSON.stringify(updates) }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['threads'] })
   });
-  const handleArchive = (id: string) => {
-    toggleMutation.mutate({ id, updates: { folder: 'trash' } });
-    toast.info("Moved to trash");
-  };
-  const handleToggleRead = (id: string, current: boolean) => {
-    toggleMutation.mutate({ id, updates: { isRead: !current } });
-    toast.info(!current ? "Marked as read" : "Marked as unread");
-  };
-  const handleToggleStar = (id: string, current: boolean) => {
-    toggleMutation.mutate({ id, updates: { isStarred: !current } });
-  };
   return (
     <AppLayout>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="py-8 md:py-10 lg:py-12 space-y-8">
-          <header className="flex flex-col gap-6">
+        <div className="py-8 md:py-10 lg:py-12 space-y-10">
+          <header className="space-y-8 sticky top-0 bg-background/80 backdrop-blur-xl pt-2 pb-6 z-20">
             <div className="relative group">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-surface-on-variant opacity-50 group-focus-within:opacity-100" />
+              <Search className="absolute left-5 top-1/2 -translate-y-1/2 h-5 w-5 text-on-surface-variant opacity-30 group-focus-within:opacity-100 transition-opacity" />
               <Input
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search conversations"
-                className="w-full h-14 pl-12 pr-12 rounded-m3-xl bg-surface-2 border-none focus-visible:ring-primary transition-all shadow-sm"
+                placeholder="Search conversations..."
+                className="w-full h-16 pl-14 pr-12 rounded-m3-xl bg-surface-2 border-none focus-visible:ring-primary shadow-sm text-lg font-medium"
               />
             </div>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <h1 className="text-2xl font-black text-surface-on capitalize tracking-tighter">
+            <div className="flex items-center justify-between px-2">
+              <div className="flex items-center gap-4">
+                <h1 className="text-4xl font-black text-on-surface capitalize tracking-tighter">
                   {searchQuery ? 'Search' : folder}
                 </h1>
-                {isFetching && <Loader2 className="h-5 w-5 animate-spin text-primary" />}
+                {isFetching && <Loader2 className="h-6 w-6 animate-spin text-primary opacity-50" />}
               </div>
-              <Button 
-                variant="ghost" 
-                size="sm" 
-                onClick={() => queryClient.invalidateQueries({ queryKey: ['threads'] })} 
-                className="h-10 w-10 p-0 rounded-full bg-surface-1"
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => queryClient.invalidateQueries({ queryKey: ['threads'] })}
+                className="h-12 w-12 p-0 rounded-full bg-surface-1 shadow-sm hover:scale-105 active:scale-95 transition-all"
               >
-                 <RefreshCw className="h-5 w-5" />
+                 <RefreshCw className="h-6 w-6" />
               </Button>
             </div>
           </header>
-          <section className="space-y-px">
+          <section className="space-y-px pb-32">
             {isLoading ? (
-              <div className="flex flex-col items-center justify-center py-32 gap-6">
-                <Loader2 className="h-12 w-12 animate-spin text-primary opacity-20" />
-                <p className="text-sm font-bold text-muted-foreground tracking-widest uppercase animate-pulse">Relational Sync...</p>
+              <div className="flex flex-col items-center justify-center py-40 gap-6">
+                <div className="h-16 w-16 border-4 border-primary/10 border-t-primary rounded-full animate-spin" />
+                <p className="text-xs font-black text-on-surface-variant tracking-[0.3em] uppercase opacity-30">Relational Sync</p>
               </div>
             ) : filteredThreads.length > 0 ? (
               <AnimatePresence mode="popLayout">
@@ -196,34 +157,43 @@ export function HomePage() {
                     thread={thread}
                     idx={idx}
                     density={density}
-                    onArchive={handleArchive}
-                    onToggleRead={handleToggleRead}
-                    onToggleStar={handleToggleStar}
+                    onArchive={(id) => { toggleMutation.mutate({ id, updates: { folder: 'trash' } }); toast.info("Moved to trash"); }}
+                    onToggleRead={(id, cur) => { toggleMutation.mutate({ id, updates: { isRead: !cur } }); toast.info(!cur ? "Marked read" : "Marked unread"); }}
+                    onToggleStar={(id, cur) => toggleMutation.mutate({ id, updates: { isStarred: !cur } })}
                   />
                 ))}
               </AnimatePresence>
             ) : (
-              <div className="flex flex-col items-center justify-center py-40 text-center gap-8 bg-surface-1 rounded-m3-xl border-2 border-dashed border-surface-variant/30">
-                <div className="h-24 w-24 bg-surface-2 rounded-full flex items-center justify-center">
-                  <InboxIcon className="h-12 w-12 text-surface-on-variant/20" />
+              <motion.div 
+                initial={{ opacity: 0, scale: 0.9 }} 
+                animate={{ opacity: 1, scale: 1 }} 
+                className="flex flex-col items-center justify-center py-48 text-center gap-8 bg-surface-1/50 rounded-m3-xl border-2 border-dashed border-surface-variant/20"
+              >
+                <div className="relative">
+                  <div className="h-28 w-28 bg-primary/5 rounded-full flex items-center justify-center">
+                    <InboxIcon className="h-14 w-14 text-primary/20" />
+                  </div>
+                  <Sparkles className="absolute -top-2 -right-2 h-8 w-8 text-primary/30 animate-pulse" />
                 </div>
                 <div className="space-y-2">
-                  <h3 className="text-xl font-black tracking-tight">Inbox Clean</h3>
-                  <p className="text-sm text-surface-on-variant/60 max-w-[240px]">No relational data found in {folder}.</p>
+                  <h3 className="text-2xl font-black tracking-tight text-on-surface">Inbox Clean</h3>
+                  <p className="text-sm text-on-surface-variant max-w-[280px] leading-relaxed">
+                    Everything is sorted. Use Simulation tools in Settings to generate data.
+                  </p>
                 </div>
-              </div>
+              </motion.div>
             )}
           </section>
         </div>
       </div>
       <Link to="/compose">
         <motion.button
-          whileHover={{ scale: 1.1, rotate: 90 }}
+          whileHover={{ scale: 1.1, rotate: 5 }}
           whileTap={{ scale: 0.9 }}
-          className="m3-fab shadow-2xl shadow-primary/40 bg-primary text-white"
+          className="m3-fab shadow-2xl shadow-primary/40 bg-primary text-white h-16 w-16 rounded-[24px]"
           aria-label="Compose"
         >
-          <Plus className="h-8 w-8" />
+          <Plus className="h-10 w-10" />
         </motion.button>
       </Link>
     </AppLayout>

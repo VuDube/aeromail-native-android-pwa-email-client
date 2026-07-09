@@ -3,160 +3,127 @@ import { AppLayout } from '@/components/layout/AppLayout';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { 
-  Smartphone, 
-  Cloud, 
-  Terminal, 
-  ShieldCheck, 
-  Info, 
-  BookOpen, 
-  ChevronRight,
+import {
+  Smartphone,
+  Cloud,
+  Terminal,
+  ShieldCheck,
+  Info,
+  BookOpen,
   Download,
   Key,
-  Database
+  Database,
+  Wand2
 } from 'lucide-react';
 export function DocsPage() {
   return (
     <AppLayout>
-      <div className="max-w-4xl mx-auto px-4 py-8 md:py-12 space-y-10">
-        <header className="space-y-2">
-          <div className="flex items-center gap-2 text-primary font-bold tracking-tight">
-            <BookOpen className="h-5 w-5" /> AeroMail PWA Guide
-          </div>
-          <h1 className="text-4xl font-extrabold text-on-surface tracking-tight">Developer Documentation</h1>
-          <p className="text-lg text-on-surface-variant max-w-2xl">
-            Everything you need to know about installing, deploying, and configuring AeroMail as a native-grade PWA.
-          </p>
-        </header>
-        {/* Section 1: Android PWA Installation */}
-        <section className="space-y-4">
-          <div className="flex items-center gap-3">
-            <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-primary">
-              <Smartphone className="h-5 w-5" />
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="py-8 md:py-10 lg:py-12 space-y-12">
+          <header className="space-y-4">
+            <div className="flex items-center gap-2 text-primary font-bold tracking-widest uppercase text-xs">
+              <BookOpen className="h-4 w-4" /> AeroMail Technical Guide
             </div>
-            <h2 className="text-2xl font-bold">Android PWA Installation</h2>
-          </div>
-          <Card className="border-none bg-surface-1 shadow-sm">
-            <CardContent className="pt-6 space-y-4">
-              <p className="text-sm text-on-surface-variant">
-                AeroMail is designed to function as a native Android application. Follow these steps to install:
-              </p>
-              <div className="grid gap-3">
-                {[
-                  "Open Chrome on your Android device.",
-                  "Navigate to the AeroMail URL.",
-                  "Tap the three-dot menu icon in the top right corner.",
-                  "Select 'Install app' or 'Add to Home screen'.",
-                  "The 'AeroMail' icon will now appear in your app drawer with native-like behavior (splash screen, no browser UI)."
-                ].map((step, i) => (
-                  <div key={i} className="flex items-start gap-3">
-                    <Badge variant="outline" className="mt-0.5 rounded-full h-5 w-5 flex items-center justify-center p-0 shrink-0 border-primary text-primary">
-                      {i + 1}
-                    </Badge>
-                    <span className="text-sm">{step}</span>
+            <h1 className="text-4xl md:text-5xl font-black text-on-surface tracking-tighter">Developer Documentation</h1>
+            <p className="text-xl text-on-surface-variant max-w-3xl leading-relaxed">
+              Native-grade Progressive Web App architected on Cloudflare's global edge network.
+            </p>
+          </header>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
+            {/* Section 1: PWA */}
+            <section className="space-y-6">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-2xl bg-primary/10 flex items-center justify-center text-primary shadow-sm">
+                  <Smartphone className="h-6 w-6" />
+                </div>
+                <h2 className="text-2xl font-bold tracking-tight">Android PWA Integration</h2>
+              </div>
+              <Card className="border-none bg-surface-1 shadow-sm rounded-m3-xl overflow-hidden">
+                <CardContent className="pt-8 space-y-6">
+                  <div className="space-y-4">
+                    {[
+                      "Navigate to AeroMail in Chrome for Android.",
+                      "Open the browser menu (⋮) and select 'Install App'.",
+                      "The Service Worker will cache the UI shell instantly.",
+                      "Launch from your Home Screen for full-screen immersive mode."
+                    ].map((step, i) => (
+                      <div key={i} className="flex items-start gap-4">
+                        <span className="h-6 w-6 rounded-full bg-primary text-white flex items-center justify-center text-xs font-bold shrink-0">{i + 1}</span>
+                        <span className="text-sm font-medium leading-normal">{step}</span>
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
-              <Alert className="bg-primary/5 border-primary/20">
-                <Info className="h-4 w-4 text-primary" />
-                <AlertTitle className="text-primary font-bold">Pro Tip</AlertTitle>
-                <AlertDescription className="text-xs">
-                  Once installed, AeroMail uses a Service Worker to cache shell assets, providing near-instant load times even on spotty 4G connections.
-                </AlertDescription>
-              </Alert>
-            </CardContent>
-          </Card>
-        </section>
-        {/* Section 2: Deployment Guide */}
-        <section className="space-y-4">
-          <div className="flex items-center gap-3">
-            <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-primary">
-              <Cloud className="h-5 w-5" />
-            </div>
-            <h2 className="text-2xl font-bold">Cloudflare Deployment</h2>
-          </div>
-          <Card className="border-none bg-surface-1 shadow-sm">
-            <CardHeader>
-              <CardTitle>Zero-Cost Infrastructure</CardTitle>
-              <CardDescription>Leveraging Cloudflare Free Tier for edge-based performance.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="space-y-2">
-                <h4 className="text-sm font-bold flex items-center gap-2"><Terminal className="h-4 w-4" /> Required Commands</h4>
-                <div className="bg-zinc-950 text-zinc-50 p-4 rounded-xl font-mono text-xs overflow-x-auto space-y-2">
-                  <p># 1. Create D1 Database for Email Indexes</p>
-                  <p className="text-primary-foreground/60">wrangler d1 create aeromail-db</p>
-                  <p># 2. Create KV Namespace for User Sessions</p>
-                  <p className="text-primary-foreground/60">wrangler kv:namespace create aeromail-sessions</p>
-                  <p># 3. Create R2 Bucket for Attachments</p>
-                  <p className="text-primary-foreground/60">wrangler r2 bucket create aeromail-assets</p>
-                  <p># 4. Deploy Application</p>
-                  <p className="text-primary-foreground/60">bun run deploy</p>
+                  <Alert className="bg-primary/5 border-primary/10 rounded-2xl">
+                    <Info className="h-4 w-4 text-primary" />
+                    <AlertTitle className="text-primary font-bold mb-1 uppercase text-[10px] tracking-widest">Performance Note</AlertTitle>
+                    <AlertDescription className="text-xs text-on-surface-variant">
+                      AeroMail targets sub-100ms LCP by utilizing Stale-While-Revalidate caching for all static assets via its built-in Service Worker.
+                    </AlertDescription>
+                  </Alert>
+                </CardContent>
+              </Card>
+            </section>
+            {/* Section 2: Deployment */}
+            <section className="space-y-6">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-2xl bg-primary/10 flex items-center justify-center text-primary shadow-sm">
+                  <Cloud className="h-6 w-6" />
                 </div>
+                <h2 className="text-2xl font-bold tracking-tight">Cloudflare Infrastructure</h2>
               </div>
-              <p className="text-sm text-on-surface-variant italic">
-                Note: In this preview environment, all storage is consolidated into a single Global Durable Object for simulation purposes.
-              </p>
-            </CardContent>
-          </Card>
-        </section>
-        {/* Section 3: Configuration & Secrets */}
-        <section className="space-y-4">
-          <div className="flex items-center gap-3">
-            <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-primary">
-              <Key className="h-5 w-5" />
-            </div>
-            <h2 className="text-2xl font-bold">Configuration & Gmail OAuth</h2>
+              <Card className="border-none bg-surface-1 shadow-sm rounded-m3-xl">
+                <CardHeader>
+                  <CardTitle className="text-lg">Edge Deployment Guide</CardTitle>
+                  <CardDescription>Console commands for zero-cost hosting setup.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  <div className="bg-zinc-950 text-zinc-300 p-5 rounded-2xl font-mono text-xs overflow-x-auto border-2 border-zinc-900 shadow-xl">
+                    <p className="text-zinc-500 mb-2"># Create D1 Storage</p>
+                    <p className="text-primary mb-3">wrangler d1 create aeromail-db</p>
+                    <p className="text-zinc-500 mb-2"># Init DB Schema</p>
+                    <p className="text-primary mb-3">wrangler d1 execute aeromail-db --file=./worker/schema.sql</p>
+                    <p className="text-zinc-500 mb-2"># Deploy Worker</p>
+                    <p className="text-primary">bun run deploy</p>
+                  </div>
+                </CardContent>
+              </Card>
+            </section>
           </div>
-          <Card className="border-none bg-surface-1 shadow-sm">
-            <CardContent className="pt-6 space-y-4">
-              <p className="text-sm">To enable real email sending via Gmail API, you must configure secrets in your Cloudflare dashboard or via CLI:</p>
-              <div className="space-y-3">
-                <div className="p-3 bg-surface-2 rounded-lg flex items-center justify-between">
-                  <span className="text-xs font-mono font-bold">GOOGLE_CLIENT_ID</span>
-                  <Badge variant="secondary">Required</Badge>
-                </div>
-                <div className="p-3 bg-surface-2 rounded-lg flex items-center justify-between">
-                  <span className="text-xs font-mono font-bold">GOOGLE_CLIENT_SECRET</span>
-                  <Badge variant="secondary">Required</Badge>
-                </div>
+          {/* Section 3: Inbound Simulation */}
+          <section className="space-y-6">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-2xl bg-primary/10 flex items-center justify-center text-primary shadow-sm">
+                <Wand2 className="h-6 w-6" />
               </div>
-              <div className="text-xs text-on-surface-variant flex gap-2 items-start">
-                <ShieldCheck className="h-4 w-4 text-green-600 shrink-0" />
-                <span>
-                  Configure your OAuth Consent Screen in Google Cloud Console to allow the <code>https://your-app.pages.dev/api/auth/callback</code> redirect URI.
-                </span>
-              </div>
-            </CardContent>
-          </Card>
-        </section>
-        {/* Section 4: Architecture */}
-        <section className="space-y-4 pb-20">
-          <div className="flex items-center gap-3">
-            <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-primary">
-              <Database className="h-5 w-5" />
+              <h2 className="text-2xl font-bold tracking-tight">Real-time Simulation Engine</h2>
             </div>
-            <h2 className="text-2xl font-bold">Edge Architecture</h2>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Card className="border-none bg-surface-1">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-base">Durable Objects</CardTitle>
-              </CardHeader>
-              <CardContent className="text-xs text-on-surface-variant leading-relaxed">
-                Acts as a stateful coordination layer for email threads, ensuring consistency across globally distributed worker instances.
+            <Card className="border-none bg-surface-1 shadow-sm rounded-m3-xl">
+              <CardContent className="pt-8 grid md:grid-cols-2 gap-8">
+                <div className="space-y-4">
+                  <h3 className="font-bold flex items-center gap-2"><Database className="h-4 w-4 text-primary" /> Relational Logic</h3>
+                  <p className="text-sm text-on-surface-variant leading-relaxed">
+                    AeroMail implements a D1-backed simulation engine. When you trigger an inbound simulation, the backend:
+                  </p>
+                  <ul className="text-xs space-y-2 list-disc pl-4 text-on-surface-variant">
+                    <li>Generates a random UUID for the message and thread.</li>
+                    <li>Selects a sender from a diverse pool of mock services (GitHub, Stripe, etc).</li>
+                    <li>Calculates thread metadata (unread counts, snippets, timestamps).</li>
+                    <li>Synchronizes the update across the edge in real-time.</li>
+                  </ul>
+                </div>
+                <div className="space-y-4">
+                  <h3 className="font-bold flex items-center gap-2"><Key className="h-4 w-4 text-primary" /> API Endpoint</h3>
+                  <div className="bg-surface-2 p-4 rounded-xl border border-surface-variant/20">
+                    <code className="text-xs font-bold text-primary">POST /api/simulate/inbound</code>
+                    <p className="text-[10px] mt-2 text-on-surface-variant italic">
+                      Used in the Settings view to test your Inbox live without external SMTP configuration.
+                    </p>
+                  </div>
+                </div>
               </CardContent>
             </Card>
-            <Card className="border-none bg-surface-1">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-base">Free Tier Limits</CardTitle>
-              </CardHeader>
-              <CardContent className="text-xs text-on-surface-variant leading-relaxed">
-                AeroMail fits within the 100k daily requests limit of the Cloudflare Workers free plan, providing zero-cost hosting for personal use.
-              </CardContent>
-            </Card>
-          </div>
-        </section>
+          </section>
+        </div>
       </div>
     </AppLayout>
   );

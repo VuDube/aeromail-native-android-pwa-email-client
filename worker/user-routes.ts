@@ -2,32 +2,46 @@ import { Hono } from "hono";
 import { ok, bad, notFound } from './core-utils';
 import { FolderType, Email, EmailThread, User } from "@shared/types";
 import { MOCK_USERS, MOCK_EMAILS } from "@shared/mock-data";
-// Binding Interface for Cloudflare D1
 export interface Env {
   EMAIL_DB: D1Database;
   TOKENS: KVNamespace;
 }
+const SIMULATED_SENDERS = [
+  { name: "GitHub", email: "noreply@github.com" },
+  { name: "Stripe", email: "support@stripe.com" },
+  { name: "Figma Team", email: "notifications@figma.com" },
+  { name: "Linear", email: "updates@linear.app" },
+  { name: "Discord", email: "no-reply@discord.com" }
+];
+const SIMULATED_SUBJECTS = [
+  "New sign-in to your account",
+  "Your weekly activity report is ready",
+  "Invoice for your latest subscription",
+  "You were mentioned in a comment",
+  "Action required: Verify your email address"
+];
+const SIMULATED_BODIES = [
+  "We detected a new sign-in to your AeroMail account from a new device. If this wasn't you, please secure your account immediately.",
+  "Here is a summary of your team's progress this week. You've completed 24 tasks and have 5 new notifications pending.",
+  "Your payment of $29.00 was successful. You can download your invoice from your billing dashboard at any time.",
+  "Hey! I just replied to your thread regarding the Phase 13 deployment. Let me know what you think about the container strategy.",
+  "Please click the button below to verify your email address and finish setting up your account."
+];
 export function userRoutes(app: Hono<{ Bindings: Env }>) {
-  // GET /api/init - Seed the database
   app.get('/api/init', async (c) => {
     try {
-      // Check if seeded
       const check = await c.env.EMAIL_DB.prepare("SELECT COUNT(*) as count FROM users").first<{count: number}>();
       if (check && check.count > 0) return ok(c, { initialized: true, message: "Already seeded" });
       const statements = [];
-      // Seed Users
       for (const u of MOCK_USERS) {
         statements.push(c.env.EMAIL_DB.prepare(
           "INSERT INTO users (id, name, email, avatar_url) VALUES (?, ?, ?, ?)"
         ).bind(u.id, u.name, u.email, u.avatarUrl || null));
       }
-      // Seed Emails & Threads (Simplified for Init)
       for (const e of MOCK_EMAILS) {
-        // Create Thread if not exists
         statements.push(c.env.EMAIL_DB.prepare(
           "INSERT OR IGNORE INTO threads (id, subject, last_message_at, snippet, unread_count, is_starred, folder) VALUES (?, ?, ?, ?, ?, ?, ?)"
         ).bind(e.threadId, e.subject, e.timestamp, e.snippet, e.isRead ? 0 : 1, e.isStarred ? 1 : 0, e.folder));
-        // Insert Email
         statements.push(c.env.EMAIL_DB.prepare(
           "INSERT INTO emails (id, thread_id, from_name, from_email, to_json, subject, body, snippet, timestamp, is_read, is_starred, folder) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
         ).bind(e.id, e.threadId, e.from.name, e.from.email, JSON.stringify(e.to), e.subject, e.body, e.snippet, e.timestamp, e.isRead ? 1 : 0, e.isStarred ? 1 : 0, e.folder));
@@ -35,11 +49,9 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
       await c.env.EMAIL_DB.batch(statements);
       return ok(c, { initialized: true });
     } catch (e) {
-      console.error("Init Error:", e);
       return bad(c, 'Failed to initialize: ' + String(e));
     }
   });
-  // POST /api/init/reset - Factory Reset
   app.post('/api/init/reset', async (c) => {
     try {
       await c.env.EMAIL_DB.batch([
@@ -49,13 +61,35 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
         c.env.EMAIL_DB.prepare("DELETE FROM domains"),
         c.env.EMAIL_DB.prepare("DELETE FROM user_domains")
       ]);
-      // Re-trigger init logic via redirect or internal call
       return ok(c, { reset: true });
     } catch (e) {
       return bad(c, 'Reset failed: ' + String(e));
     }
   });
-  // GET /api/emails - List threads by folder
+  app.post('/api/simulate/inbound', async (c) => {
+    try {
+      const sender = SIMULATED_SENDERS[Math.floor(Math.random() * SIMULATED_SENDERS.length)];
+      const subject = SIMULATED_SUBJECTS[Math.floor(Math.random() * SIMULATED_SUBJECTS.length)];
+      const body = SIMULATED_BODIES[Math.floor(Math.random() * SIMULATED_BODIES.length)];
+      const emailId = crypto.randomUUID();
+      const threadId = crypto.randomUUID();
+      const timestamp = Date.now();
+      const snippet = body.slice(0, 100);
+      await c.env.EMAIL_DB.batch([
+        c.env.EMAIL_DB.prepare(`
+          INSERT INTO threads (id, subject, last_message_at, snippet, unread_count, is_starred, folder)
+          VALUES (?, ?, ?, ?, 1, 0, 'inbox')
+        `).bind(threadId, subject, timestamp, snippet),
+        c.env.EMAIL_DB.prepare(`
+          INSERT INTO emails (id, thread_id, from_name, from_email, to_json, subject, body, snippet, timestamp, is_read, is_starred, folder)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 'inbox')
+        `).bind(emailId, threadId, sender.name, sender.email, JSON.stringify([{ email: "user@aeromail.dev" }]), subject, body, snippet, timestamp)
+      ]);
+      return ok(c, { id: emailId, threadId });
+    } catch (e) {
+      return bad(c, 'Simulation failed: ' + String(e));
+    }
+  });
   app.get('/api/emails', async (c) => {
     const folder = (c.req.query('folder') as FolderType) || 'inbox';
     const limit = Math.min(Number(c.req.query('limit')) || 20, 100);
@@ -93,10 +127,9 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
       }));
       return ok(c, threads);
     } catch (e) {
-      return bad(c, 'Failed to fetch mailbox: ' + String(e));
+      return bad(c, 'Failed to fetch mailbox');
     }
   });
-  // GET /api/emails/:id - Fetch single email with thread context
   app.get('/api/emails/:id', async (c) => {
     const id = c.req.param('id');
     try {
@@ -127,25 +160,11 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
           folder: m.folder as FolderType
         }))
       };
-      return ok(c, {
-        id: email.id,
-        threadId: email.thread_id,
-        from: { name: email.from_name, email: email.from_email },
-        to: JSON.parse(email.to_json),
-        subject: email.subject,
-        body: email.body,
-        snippet: email.snippet,
-        timestamp: email.timestamp,
-        isRead: !!email.is_read,
-        isStarred: !!email.is_starred,
-        folder: email.folder as FolderType,
-        thread
-      });
+      return ok(c, { ...email, thread });
     } catch (e) {
       return bad(c, 'Database error');
     }
   });
-  // PATCH /api/emails/:id - Update status
   app.patch('/api/emails/:id', async (c) => {
     const id = c.req.param('id');
     const updates = await c.req.json();
@@ -162,20 +181,16 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
       params.push(id);
       if (setClauses.length > 0) {
         await c.env.EMAIL_DB.prepare(`UPDATE emails SET ${setClauses.join(', ')} WHERE id = ?`).bind(...params).run();
-        // Recalculate thread metadata
         const { results: msgs } = await c.env.EMAIL_DB.prepare("SELECT is_read, is_starred FROM emails WHERE thread_id = ?").bind(email.thread_id).all<any>();
         const unreadCount = msgs.filter(m => !m.is_read).length;
         const isStarred = msgs.some(m => m.is_starred) ? 1 : 0;
-        await c.env.EMAIL_DB.prepare(
-          "UPDATE threads SET unread_count = ?, is_starred = ? WHERE id = ?"
-        ).bind(unreadCount, isStarred, email.thread_id).run();
+        await c.env.EMAIL_DB.prepare("UPDATE threads SET unread_count = ?, is_starred = ? WHERE id = ?").bind(unreadCount, isStarred, email.thread_id).run();
       }
       return ok(c, { success: true });
     } catch (e) {
       return bad(c, 'Update failed');
     }
   });
-  // POST /api/threads/:id/read - Mark thread as read
   app.post('/api/threads/:id/read', async (c) => {
     const threadId = c.req.param('id');
     try {
@@ -188,7 +203,6 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
       return bad(c, 'Batch update failed');
     }
   });
-  // POST /api/emails/send - Send new email
   app.post('/api/emails/send', async (c) => {
     const { to, subject, body, threadId } = await c.req.json();
     const emailId = crypto.randomUUID();
@@ -197,15 +211,11 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
     const snippet = body.slice(0, 100);
     try {
       await c.env.EMAIL_DB.batch([
-        // Upsert Thread
         c.env.EMAIL_DB.prepare(`
-          INSERT INTO threads (id, subject, last_message_at, snippet, unread_count, is_starred, folder) 
+          INSERT INTO threads (id, subject, last_message_at, snippet, unread_count, is_starred, folder)
           VALUES (?, ?, ?, ?, 0, 0, 'sent')
-          ON CONFLICT(id) DO UPDATE SET 
-            last_message_at = excluded.last_message_at,
-            snippet = excluded.snippet
+          ON CONFLICT(id) DO UPDATE SET last_message_at = excluded.last_message_at, snippet = excluded.snippet
         `).bind(targetThreadId, subject, timestamp, snippet),
-        // Insert Email
         c.env.EMAIL_DB.prepare(`
           INSERT INTO emails (id, thread_id, from_name, from_email, to_json, subject, body, snippet, timestamp, is_read, is_starred, folder)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0, 'sent')
@@ -216,17 +226,11 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
       return bad(c, 'Failed to send');
     }
   });
-  // GET /api/me - Current User
   app.get('/api/me', async (c) => {
     try {
       const user = await c.env.EMAIL_DB.prepare("SELECT * FROM users LIMIT 1").first<any>();
       if (!user) return ok(c, MOCK_USERS[0]);
-      return ok(c, {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        avatarUrl: user.avatar_url
-      });
+      return ok(c, { id: user.id, name: user.name, email: user.email, avatarUrl: user.avatar_url });
     } catch (e) {
       return ok(c, MOCK_USERS[0]);
     }
