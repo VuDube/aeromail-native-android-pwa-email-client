@@ -10,7 +10,7 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
       mode: db ? 'production' : 'mock',
       storage: db ? 'Cloudflare D1' : 'In-Memory Fallback',
       healthy: true,
-      version: '1.0.4-stable',
+      version: '1.0.5-stable',
       location: 'Edge'
     });
   });
@@ -93,18 +93,25 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
     const id = c.req.param('id');
     const updates = await c.req.json() as any;
     if (!db) return ok(c, { success: true });
-    if (updates.folder) await db.prepare("UPDATE threads SET folder = ? WHERE id = ?").bind(updates.folder, id).run();
-    if (updates.isStarred !== undefined) await db.prepare("UPDATE threads SET is_starred = ? WHERE id = ?").bind(updates.isStarred ? 1 : 0, id).run();
-    if (updates.isRead !== undefined) await db.prepare("UPDATE threads SET unread_count = ? WHERE id = ?").bind(updates.isRead ? 0 : 1, id).run();
+    if (updates.folder) {
+      await db.prepare("UPDATE threads SET folder = ? WHERE id = ?").bind(updates.folder, id).run();
+    }
+    if (updates.isStarred !== undefined) {
+      await db.prepare("UPDATE threads SET is_starred = ? WHERE id = ?").bind(updates.isStarred ? 1 : 0, id).run();
+    }
+    if (updates.isRead !== undefined) {
+      // unread_count = 0 when read, 1 when unread (simplified for demo)
+      await db.prepare("UPDATE threads SET unread_count = ? WHERE id = ?").bind(updates.isRead ? 0 : 1, id).run();
+    }
     return ok(c, { success: true });
   });
   app.post('/api/emails/send', async (c) => {
     const db = getDB(c);
     const { to, subject, body, threadId } = await c.req.json();
-    if (!db) return ok(c, { id: crypto.randomUUID(), success: true, mock: true });
     const id = crypto.randomUUID();
     const tid = threadId || crypto.randomUUID();
     const ts = Date.now();
+    if (!db) return ok(c, { id, success: true, mock: true });
     await db.batch([
       db.prepare("INSERT INTO threads (id, subject, last_message_at, snippet, folder) VALUES (?, ?, ?, ?, 'sent') ON CONFLICT(id) DO UPDATE SET last_message_at = excluded.last_message_at, snippet = excluded.snippet").bind(tid, subject, ts, body.slice(0, 50)),
       db.prepare("INSERT INTO emails (id, thread_id, from_name, from_email, to_json, subject, body, snippet, timestamp, folder, is_read) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'sent', 1)").bind(id, tid, "Aero User", "user@aeromail.dev", JSON.stringify([{ email: to }]), subject, body, body.slice(0, 50), ts)
@@ -113,11 +120,11 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
   });
   app.post('/api/simulate/inbound', async (c) => {
     const db = getDB(c);
-    if (!db) return ok(c, { success: true, mock: true });
     const threadId = crypto.randomUUID();
     const ts = Date.now();
     const subject = "Project Sync Request";
     const body = "I've reviewed the design tokens. The Material Design 3 surface elevations look correct.";
+    if (!db) return ok(c, { success: true, mock: true, threadId });
     await db.batch([
       db.prepare("INSERT INTO threads (id, subject, last_message_at, snippet, unread_count, folder) VALUES (?, ?, ?, ?, 1, 'inbox')").bind(threadId, subject, ts, body.slice(0, 50)),
       db.prepare("INSERT INTO emails (id, thread_id, from_name, from_email, to_json, subject, body, snippet, timestamp, folder) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'inbox')").bind(crypto.randomUUID(), threadId, "Alex Rivera", "alex@example.com", "[]", subject, body, body.slice(0, 50), ts, 'inbox')

@@ -1,10 +1,10 @@
 import { ApiResponse } from "../../shared/types"
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 12000);
+  const timeoutId = setTimeout(() => controller.abort(), 15000); // 15s timeout for production edge reliability
   try {
     const res = await fetch(path, {
-      headers: { 
+      headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json'
       },
@@ -26,14 +26,14 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
       const errMsg = json.error || `Server responded with ${res.status}`;
       // Guide the user if they're trying to use features that require D1
       if (errMsg.toLowerCase().includes('binding') || errMsg.toLowerCase().includes('d1')) {
-        throw new Error("Storage Unavailable: Feature requires a Cloudflare D1 binding. Running in mock fallback.");
+        throw new Error("Storage Unavailable: This feature requires a Cloudflare D1 database binding.");
       }
       throw new Error(errMsg);
     }
     return json.data;
   } catch (e: any) {
     if (e.name === 'AbortError') {
-      throw new Error("Network latency is too high. Request timed out after 12s.");
+      throw new Error("Network latency is too high. Request timed out after 15s.");
     }
     // Forward the error for the component to handle
     throw e;

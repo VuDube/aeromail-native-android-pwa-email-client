@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -24,7 +24,7 @@ export function ComposePage() {
   const [recipients, setRecipients] = useState<string[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const suggestionRef = useRef<HTMLDivElement>(null);
-  const { register, handleSubmit, formState: { isSubmitting } } = useForm({
+  const { register, handleSubmit } = useForm({
     resolver: zodResolver(composeSchema),
     defaultValues: { subject: '', body: '' }
   });
@@ -39,16 +39,16 @@ export function ComposePage() {
       toast.error(err.message);
     }
   });
-  const addRecipient = (email: string) => {
+  const addRecipient = useCallback((email: string) => {
     const trimmed = email.trim().replace(',', '');
     if (trimmed && !recipients.includes(trimmed) && /^\S+@\S+\.\S+$/.test(trimmed)) {
-      setRecipients([...recipients, trimmed]);
+      setRecipients(prev => [...prev, trimmed]);
       setRecipientInput('');
       setShowSuggestions(false);
     } else if (trimmed) {
       toast.error("Invalid email address");
     }
-  };
+  }, [recipients]);
   const removeRecipient = (email: string) => {
     setRecipients(recipients.filter(r => r !== email));
   };
@@ -126,6 +126,10 @@ export function ComposePage() {
                         addRecipient(recipientInput);
                       }
                     }}
+                    onBlur={() => {
+                      // Slight delay to allow suggestion clicks to register
+                      setTimeout(() => setShowSuggestions(false), 200);
+                    }}
                     placeholder={recipients.length === 0 ? "recipient@domain.com" : ""}
                     className="bg-transparent border-none shadow-none focus-visible:ring-0 text-sm h-8 p-0"
                   />
@@ -135,6 +139,7 @@ export function ComposePage() {
                         <button
                           key={u.id}
                           type="button"
+                          onMouseDown={(e) => e.preventDefault()} // Prevent blur from firing before click
                           onClick={() => addRecipient(u.email)}
                           className="w-full text-left px-4 py-3 hover:bg-surface-1 transition-colors flex flex-col"
                         >

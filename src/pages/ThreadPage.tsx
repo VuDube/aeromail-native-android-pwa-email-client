@@ -1,4 +1,4 @@
-import React, { useEffect, memo, useState } from 'react';
+import React, { useEffect, memo, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api-client';
@@ -82,7 +82,7 @@ export function ThreadPage() {
     if (thread?.id && thread.unreadCount > 0) {
       markAsRead.mutate(thread.id);
     }
-  }, [thread?.id, thread?.unreadCount]);
+  }, [thread?.id, thread?.unreadCount, markAsRead]);
   const sendReply = useMutation({
     mutationFn: (body: string) => api('/api/emails/send', {
       method: 'POST',

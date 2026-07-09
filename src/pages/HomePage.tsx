@@ -196,7 +196,7 @@ export function HomePage() {
                 ))}
               </AnimatePresence>
             ) : (
-              <div className="py-32 flex flex-col items-center text-center gap-8 bg-surface-1/30 rounded-[48px] border-2 border-dashed border-surface-variant/10 mx-auto max-w-lg">
+              <div className="py-24 md:py-32 flex flex-col items-center text-center gap-8 bg-surface-1/30 rounded-[48px] border-2 border-dashed border-surface-variant/10 mx-auto max-w-lg">
                 <div className="relative">
                   <div className="h-24 w-24 bg-primary-container/20 rounded-full flex items-center justify-center">
                     <InboxIcon className="h-12 w-12 text-primary/30" />
@@ -213,9 +213,9 @@ export function HomePage() {
         </div>
       </div>
       <Link to="/compose">
-        <motion.button 
-          whileHover={{ scale: 1.05 }} 
-          whileTap={{ scale: 0.95 }} 
+        <motion.button
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
           className="m3-fab shadow-xl shadow-primary/30"
           aria-label="Compose new email"
         >

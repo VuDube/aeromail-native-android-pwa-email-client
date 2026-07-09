@@ -9,22 +9,16 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Button } from '@/components/ui/button';
-import { Link } from 'react-router-dom';
+import { cn } from '@/lib/utils';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { Badge } from '@/components/ui/badge';
 import {
-  Moon,
-  Sun,
   Trash2,
   RefreshCcw,
   User as UserIcon,
   Layout,
-  Monitor,
   ShieldCheck,
-  HelpCircle,
-  BookOpen,
-  ChevronRight,
   MailPlus,
   Wand2,
   Database,
@@ -179,7 +173,7 @@ export function SettingsPage() {
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1">
                     <p className="text-[10px] uppercase font-black text-surface-on-variant tracking-widest">Version</p>
-                    <p className="font-bold">{status?.version || '0.0.0-dev'}</p>
+                    <p className="font-bold">{status?.version || '1.0.5'}</p>
                   </div>
                   <div className="space-y-1">
                     <p className="text-[10px] uppercase font-black text-surface-on-variant tracking-widest">Region</p>
