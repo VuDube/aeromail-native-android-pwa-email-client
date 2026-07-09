@@ -62,7 +62,7 @@ function SwipeableThreadCard({ thread, idx, density, onArchive, onToggleRead, on
       >
         <div className="shrink-0 pt-1 flex flex-col items-center gap-3">
           <Avatar className={cn(density === 'compact' ? "h-9 w-9" : "h-12 w-12", "ring-2 ring-background shadow-sm")}>
-            <AvatarFallback className="bg-primary/10 text-primary text-sm font-black">
+            <AvatarFallback className="bg-primary/10 text-primary text-sm font-black uppercase">
               {thread.participantNames[0]?.charAt(0) || 'A'}
             </AvatarFallback>
           </Avatar>
@@ -110,10 +110,15 @@ export function HomePage() {
     if (!threads) return [];
     if (!searchQuery.trim()) return threads;
     const q = searchQuery.toLowerCase();
-    return threads.filter(t => t.subject.toLowerCase().includes(q) || t.participantNames.some(p => p.toLowerCase().includes(q)) || t.snippet.toLowerCase().includes(q));
+    return threads.filter(t => 
+      t.subject.toLowerCase().includes(q) || 
+      t.participantNames.some(p => p.toLowerCase().includes(q)) || 
+      t.snippet.toLowerCase().includes(q)
+    );
   }, [threads, searchQuery]);
   const toggleMutation = useMutation({
-    mutationFn: ({ id, updates }: { id: string, updates: any }) => api(`/api/emails/${id}`, { method: 'PATCH', body: JSON.stringify(updates) }),
+    mutationFn: ({ id, updates }: { id: string, updates: any }) => 
+      api(`/api/emails/${id}`, { method: 'PATCH', body: JSON.stringify(updates) }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['threads'] })
   });
   const isMock = status?.mode === 'mock';
@@ -124,8 +129,8 @@ export function HomePage() {
           <header className="space-y-6 sticky top-0 bg-background/80 backdrop-blur-xl pt-2 pb-6 z-20">
             {isMock && (
               <div className="bg-yellow-100/50 border border-yellow-200 px-4 py-2 rounded-full flex items-center gap-2 text-[10px] font-black text-yellow-700 uppercase tracking-widest shadow-sm">
-                <CloudOff className="h-3 w-3" /> 
-                Running in Mock Mode - Storage persistence limited
+                <CloudOff className="h-3 w-3" />
+                Running in Mock Mode - Limited Persistence
               </div>
             )}
             <div className="relative group">
@@ -164,7 +169,7 @@ export function HomePage() {
               <div className="bg-destructive/10 border border-destructive/20 rounded-m3-xl p-8 text-center space-y-4">
                 <p className="text-destructive font-bold">Failed to load conversations</p>
                 <p className="text-sm text-on-surface-variant max-w-md mx-auto">
-                  {error instanceof Error ? error.message : "Ensure your Cloudflare D1 database is correctly bound in wrangler.jsonc."}
+                  {error instanceof Error ? error.message : "Database connection issue detected."}
                 </p>
                 <Button variant="outline" onClick={() => window.location.reload()}>Retry Connection</Button>
               </div>
@@ -176,19 +181,19 @@ export function HomePage() {
                     thread={thread}
                     idx={idx}
                     density={density}
-                    onArchive={(id) => { 
+                    onArchive={(id) => {
                       if (isMock) { toast.error("Archiving disabled in Mock Mode"); return; }
-                      toggleMutation.mutate({ id, updates: { folder: 'trash' } }); 
-                      toast.info("Moved to trash"); 
+                      toggleMutation.mutate({ id, updates: { folder: 'trash' } });
+                      toast.info("Moved to trash");
                     }}
-                    onToggleRead={(id, cur) => { 
-                      if (isMock) { toast.error("Updating read status disabled in Mock Mode"); return; }
-                      toggleMutation.mutate({ id, updates: { isRead: !cur } }); 
-                      toast.info(!cur ? "Marked read" : "Marked unread"); 
+                    onToggleRead={(id, cur) => {
+                      if (isMock) { toast.error("Status updates disabled in Mock Mode"); return; }
+                      toggleMutation.mutate({ id, updates: { isRead: !cur } });
+                      toast.info(!cur ? "Marked read" : "Marked unread");
                     }}
                     onToggleStar={(id, cur) => {
                       if (isMock) { toast.error("Starring disabled in Mock Mode"); return; }
-                      toggleMutation.mutate({ id, updates: { isStarred: !cur } })
+                      toggleMutation.mutate({ id, updates: { isStarred: !cur } });
                     }}
                   />
                 ))}
@@ -201,14 +206,14 @@ export function HomePage() {
               >
                 <div className="relative">
                   <div className="h-28 w-28 bg-primary/5 rounded-full flex items-center justify-center">
-                    <InboxIcon className="h-14 w-14 text-primary/20" />
+                    <InboxIcon className="h-14 w-14 text-primary/30" />
                   </div>
-                  <Sparkles className="absolute -top-2 -right-2 h-8 w-8 text-primary/30 animate-pulse" />
+                  <Sparkles className="absolute -top-2 -right-2 h-8 w-8 text-primary/40 animate-pulse" />
                 </div>
                 <div className="space-y-2">
-                  <h3 className="text-2xl font-black tracking-tight text-on-surface">Inbox Clean</h3>
+                  <h3 className="text-2xl font-black tracking-tight text-on-surface">Inbox Zero</h3>
                   <p className="text-sm text-on-surface-variant max-w-[280px] leading-relaxed">
-                    Everything is sorted. {isMock ? "Mock fallback data is being served." : "Use Simulation tools in Settings to generate data."}
+                    Everything is sorted. {isMock ? "Mock fallback data is being served." : "Enjoy the quiet."}
                   </p>
                 </div>
               </motion.div>

@@ -3,8 +3,37 @@ import { ok, bad, notFound } from './core-utils';
 import { FolderType, Email, EmailThread, User } from "@shared/types";
 import { MOCK_USERS, MOCK_EMAILS } from "@shared/mock-data";
 export interface Env {
-  EMAIL_DB?: D1Database; // Made optional for fallback check
+  EMAIL_DB?: D1Database;
   TOKENS: KVNamespace;
+}
+interface ThreadRow {
+  id: string;
+  subject: string;
+  last_message_at: number;
+  snippet: string;
+  unread_count: number;
+  is_starred: number;
+  folder: string;
+}
+interface EmailRow {
+  id: string;
+  thread_id: string;
+  from_name: string;
+  from_email: string;
+  to_json: string;
+  subject: string;
+  body: string;
+  snippet: string;
+  timestamp: number;
+  is_read: number;
+  is_starred: number;
+  folder: string;
+}
+interface UserRow {
+  id: string;
+  name: string;
+  email: string;
+  avatar_url: string | null;
 }
 const SIMULATED_SENDERS = [
   { name: "GitHub", email: "noreply@github.com" },
@@ -28,8 +57,7 @@ const SIMULATED_BODIES = [
   "Please click the button below to verify your email address and finish setting up your account."
 ];
 export function userRoutes(app: Hono<{ Bindings: Env }>) {
-  // Helper to check if DB is available
-  const getDB = (c: any) => c.env.EMAIL_DB;
+  const getDB = (c: any): D1Database | undefined => c.env.EMAIL_DB;
   app.get('/api/status', (c) => {
     const db = getDB(c);
     return ok(c, {
@@ -42,7 +70,7 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
     const db = getDB(c);
     if (!db) return ok(c, { initialized: true, message: "Running in Mock Mode (No D1 Binding Found)" });
     try {
-      const check = await db.prepare("SELECT COUNT(*) as count FROM users").first<{count: number}>();
+      const check = await db.prepare("SELECT COUNT(*) as count FROM users").first() as { count: number } | null;
       if (check && check.count > 0) return ok(c, { initialized: true, message: "Already seeded" });
       const statements = [];
       for (const u of MOCK_USERS) {
@@ -99,9 +127,8 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
     const folder = (c.req.query('folder') as FolderType) || 'inbox';
     const limit = Math.min(Number(c.req.query('limit')) || 20, 100);
     if (!db) {
-      // Mock Fallback Logic
-      const filtered = MOCK_EMAILS.filter(e => e.folder === folder || (folder === 'starred' && e.isStarred));
-      const threads: EmailThread[] = filtered.map(e => ({
+      const filtered = MOCK_EMAILS.filter((e: Email) => e.folder === folder || (folder === 'starred' && e.isStarred));
+      const threads: EmailThread[] = filtered.map((e: Email) => ({
         id: e.threadId,
         subject: e.subject,
         lastMessageAt: e.timestamp,
@@ -115,11 +142,13 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
       return ok(c, threads);
     }
     try {
-      const { results } = await db.prepare(
+      const queryResult = await db.prepare(
         "SELECT * FROM threads WHERE folder = ? OR (? = 'starred' AND is_starred = 1) ORDER BY last_message_at DESC LIMIT ?"
-      ).bind(folder, folder, limit).all<any>();
-      const threads: EmailThread[] = await Promise.all(results.map(async (t) => {
-        const { results: messages } = await db.prepare("SELECT * FROM emails WHERE thread_id = ? ORDER BY timestamp ASC").bind(t.id).all<any>();
+      ).bind(folder, folder, limit).all();
+      const results = queryResult.results as unknown as ThreadRow[];
+      const threads: EmailThread[] = await Promise.all(results.map(async (t: ThreadRow) => {
+        const msgQueryResult = await db.prepare("SELECT * FROM emails WHERE thread_id = ? ORDER BY timestamp ASC").bind(t.id).all();
+        const messages = msgQueryResult.results as unknown as EmailRow[];
         return {
           id: t.id,
           subject: t.subject,
@@ -128,8 +157,8 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
           unreadCount: t.unread_count,
           isStarred: !!t.is_starred,
           folder: t.folder as FolderType,
-          participantNames: Array.from(new Set(messages.map(m => m.from_name))),
-          messages: messages.map(m => ({
+          participantNames: Array.from(new Set(messages.map((m: EmailRow) => m.from_name))),
+          messages: messages.map((m: EmailRow) => ({
             id: m.id,
             threadId: m.thread_id,
             from: { name: m.from_name, email: m.from_email },
@@ -153,15 +182,17 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
     const db = getDB(c);
     const id = c.req.param('id');
     if (!db) {
-      const email = MOCK_EMAILS.find(e => e.id === id);
+      const email = MOCK_EMAILS.find((e: Email) => e.id === id);
       if (!email) return notFound(c, 'Email not found');
       return ok(c, { ...email, thread: { id: email.threadId, subject: email.subject, messages: [email], unreadCount: 0, isStarred: email.isStarred, folder: email.folder, lastMessageAt: email.timestamp, participantNames: [email.from.name] } });
     }
     try {
-      const email = await db.prepare("SELECT * FROM emails WHERE id = ?").bind(id).first<any>();
+      const email = await db.prepare("SELECT * FROM emails WHERE id = ?").bind(id).first() as EmailRow | null;
       if (!email) return notFound(c, 'Email not found');
-      const threadRecord = await db.prepare("SELECT * FROM threads WHERE id = ?").bind(email.thread_id).first<any>();
-      const { results: allMsgs } = await db.prepare("SELECT * FROM emails WHERE thread_id = ? ORDER BY timestamp ASC").bind(email.thread_id).all<any>();
+      const threadRecord = await db.prepare("SELECT * FROM threads WHERE id = ?").bind(email.thread_id).first() as ThreadRow | null;
+      if (!threadRecord) return notFound(c, 'Thread not found');
+      const allMsgsResult = await db.prepare("SELECT * FROM emails WHERE thread_id = ? ORDER BY timestamp ASC").bind(email.thread_id).all();
+      const allMsgs = allMsgsResult.results as unknown as EmailRow[];
       const thread: EmailThread = {
         id: threadRecord.id,
         subject: threadRecord.subject,
@@ -170,9 +201,10 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
         unreadCount: threadRecord.unread_count,
         isStarred: !!threadRecord.is_starred,
         folder: threadRecord.folder as FolderType,
-        participantNames: Array.from(new Set(allMsgs.map(m => m.from_name))),
-        messages: allMsgs.map(m => ({
+        participantNames: Array.from(new Set(allMsgs.map((m: EmailRow) => m.from_name))),
+        messages: allMsgs.map((m: EmailRow) => ({
           id: m.id,
+          thread_id: m.thread_id,
           threadId: m.thread_id,
           from: { name: m.from_name, email: m.from_email },
           to: JSON.parse(m.to_json),
@@ -184,10 +216,24 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
           isStarred: !!m.is_starred,
           folder: m.folder as FolderType
         }))
-      };
+      } as any;
       return ok(c, { ...email, thread });
     } catch (e) {
       return bad(c, 'Database error');
+    }
+  });
+  app.post('/api/threads/:id/read', async (c) => {
+    const db = getDB(c);
+    const id = c.req.param('id');
+    if (!db) return ok(c, { success: true });
+    try {
+      await db.batch([
+        db.prepare("UPDATE emails SET is_read = 1 WHERE thread_id = ?").bind(id),
+        db.prepare("UPDATE threads SET unread_count = 0 WHERE id = ?").bind(id)
+      ]);
+      return ok(c, { success: true });
+    } catch (e) {
+      return bad(c, 'Failed to update read status');
     }
   });
   app.patch('/api/emails/:id', async (c) => {
@@ -196,7 +242,7 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
     const updates = await c.req.json();
     if (!db) return bad(c, 'Update failed: Database binding missing (Read-Only Mock Mode)');
     try {
-      const email = await db.prepare("SELECT * FROM emails WHERE id = ?").bind(id).first<any>();
+      const email = await db.prepare("SELECT * FROM emails WHERE id = ?").bind(id).first() as EmailRow | null;
       if (!email) return notFound(c, 'Email not found');
       const setClauses: string[] = [];
       const params: any[] = [];
@@ -205,12 +251,13 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
         else if (key === 'isStarred') { setClauses.push("is_starred = ?"); params.push(val ? 1 : 0); }
         else if (key === 'folder') { setClauses.push("folder = ?"); params.push(val); }
       }
-      params.push(id);
       if (setClauses.length > 0) {
+        params.push(id);
         await db.prepare(`UPDATE emails SET ${setClauses.join(', ')} WHERE id = ?`).bind(...params).run();
-        const { results: msgs } = await db.prepare("SELECT is_read, is_starred FROM emails WHERE thread_id = ?").bind(email.thread_id).all<any>();
-        const unreadCount = msgs.filter(m => !m.is_read).length;
-        const isStarred = msgs.some(m => m.is_starred) ? 1 : 0;
+        const msgsResult = await db.prepare("SELECT is_read, is_starred FROM emails WHERE thread_id = ?").bind(email.thread_id).all();
+        const msgs = msgsResult.results as unknown as { is_read: number; is_starred: number }[];
+        const unreadCount = msgs.filter((m: any) => !m.is_read).length;
+        const isStarred = msgs.some((m: any) => m.is_starred) ? 1 : 0;
         await db.prepare("UPDATE threads SET unread_count = ?, is_starred = ? WHERE id = ?").bind(unreadCount, isStarred, email.thread_id).run();
       }
       return ok(c, { success: true });
@@ -240,7 +287,7 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
     const db = getDB(c);
     if (!db) return ok(c, MOCK_USERS[0]);
     try {
-      const user = await db.prepare("SELECT * FROM users LIMIT 1").first<any>();
+      const user = await db.prepare("SELECT * FROM users LIMIT 1").first() as UserRow | null;
       if (!user) return ok(c, MOCK_USERS[0]);
       return ok(c, { id: user.id, name: user.name, email: user.email, avatar_url: user.avatar_url });
     } catch (e) {

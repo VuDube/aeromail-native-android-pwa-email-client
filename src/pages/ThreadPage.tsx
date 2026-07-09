@@ -1,4 +1,4 @@
-import React, { useEffect, useCallback } from 'react';
+import React, { useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api-client';
@@ -34,7 +34,7 @@ export function ThreadPage() {
     },
   });
   useEffect(() => {
-    if (thread?.id && thread.unreadCount > 0) {
+    if (thread?.id && thread.unreadCount > 0 && !markThreadAsRead.isPending) {
       markThreadAsRead.mutate(thread.id);
     }
   }, [thread?.id, thread?.unreadCount, markThreadAsRead]);
@@ -123,7 +123,7 @@ export function ThreadPage() {
                   </div>
                 </div>
                 <div
-                  className="prose-email text-sm text-on-surface leading-relaxed"
+                  className="prose-email text-sm text-on-surface leading-relaxed whitespace-pre-wrap"
                   dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(msg.body) }}
                 />
               </motion.div>
