@@ -64,12 +64,11 @@ export function ThreadPage() {
       queryClient.invalidateQueries({ queryKey: ['thread', id] });
     }
   });
-  // Optimized side-effect to mark as read only when necessary
   useEffect(() => {
     if (id && thread && thread.unreadCount > 0) {
       markAsRead.mutate();
     }
-  }, [id, thread?.unreadCount, markAsRead]);
+  }, [id, thread, markAsRead]);
   useEffect(() => {
     if (enabledDomains.length > 0 && selectedFrom === 'user@aeromail.dev') {
       setSelectedFrom(`hello@${enabledDomains[0].name}`);

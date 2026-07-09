@@ -1,7 +1,7 @@
 import '@/lib/errorReporter';
 import { enableMapSet } from "immer";
 enableMapSet();
-import { StrictMode } from 'react'
+import React from 'react'
 import { createRoot } from 'react-dom/client'
 import {
   createBrowserRouter,
@@ -16,14 +16,17 @@ import { ThreadPage } from '@/pages/ThreadPage'
 import { ComposePage } from '@/pages/ComposePage'
 import { DocsPage } from '@/pages/DocsPage'
 import { SettingsPage } from '@/pages/SettingsPage'
+// Initialize QueryClient outside of component to ensure stability
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       retry: 1,
       refetchOnWindowFocus: false,
+      staleTime: 5 * 60 * 1000,
     },
   },
 });
+console.log("[AeroMail] Initializing Application Root...");
 const router = createBrowserRouter([
   {
     path: "/",
@@ -63,7 +66,6 @@ createRoot(document.getElementById('root')!).render(
     </ErrorBoundary>
   </QueryClientProvider>
 )
-
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('/sw.js').then(

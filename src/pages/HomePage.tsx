@@ -116,10 +116,13 @@ const SwipeableThreadCard = forwardRef<HTMLDivElement, SwipeableThreadCardProps>
 SwipeableThreadCard.displayName = 'SwipeableThreadCard';
 export function HomePage() {
   const queryClient = useQueryClient();
+  if (!queryClient) {
+    console.error("[CRITICAL] useQueryClient returned null. Verify QueryClientProvider in main.tsx");
+  }
   const { folder = 'inbox' } = useParams<{ folder: string }>();
   const [searchQuery, setSearchQuery] = useState('');
   const { density } = useDensity();
-  const { data: threads, isLoading, isFetching } = useQuery<EmailThread[]>({
+  const { data: threads, isLoading, isFetching, error } = useQuery<EmailThread[]>({
     queryKey: ['threads', folder],
     queryFn: () => api<EmailThread[]>(`/api/emails?folder=${folder}`),
   });
@@ -136,12 +139,23 @@ export function HomePage() {
   const toggleMutation = useMutation({
     mutationFn: ({ id, updates }: { id: string, updates: any }) =>
       api(`/api/threads/${id}`, { method: 'PATCH', body: JSON.stringify(updates) }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['threads'] })
+    onSuccess: () => queryClient?.invalidateQueries({ queryKey: ['threads'] })
   });
   const handleRefresh = useCallback(() => {
-    queryClient.invalidateQueries({ queryKey: ['threads'] });
+    queryClient?.invalidateQueries({ queryKey: ['threads'] });
     toast.success("Inbox updated");
   }, [queryClient]);
+  if (error) {
+    return (
+      <AppLayout>
+        <div className="flex flex-col items-center justify-center h-full py-40 gap-4">
+          <div className="text-destructive font-bold">Failed to load emails</div>
+          <p className="text-muted-foreground text-sm">{(error as any).message}</p>
+          <Button onClick={() => window.location.reload()}>Retry Connection</Button>
+        </div>
+      </AppLayout>
+    );
+  }
   return (
     <AppLayout>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">

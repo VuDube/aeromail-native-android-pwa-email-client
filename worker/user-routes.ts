@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { ok, bad, internalError, notFound, Env, getGmailAccessToken, constructMimeMessage, sendViaGmail, encrypt, getCloudflareZones, getZoneEmailRoutingStatus, decrypt } from './core-utils';
 import { MOCK_USERS } from "@shared/mock-data";
-import { DomainInfo, EmailThread } from "@shared/types";
+import { DomainInfo } from "@shared/types";
 export function userRoutes(app: Hono<{ Bindings: Env }>) {
   app.get('/api/status', async (c) => {
     return ok(c, {
@@ -9,12 +9,13 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
       cf_token_ready: !!c.env.CF_API_TOKEN,
       kv_ready: !!c.env.TOKENS,
       db_ready: !!c.env.EMAIL_DB,
-      version: '1.7.0-final'
+      version: '1.8.0-infrastructure-hardened'
     });
   });
   app.get('/api/domains', async (c) => {
+    const db = c.env.EMAIL_DB;
+    if (!db) return bad(c, "EMAIL_DB binding is missing");
     try {
-      const db = c.env.EMAIL_DB;
       const zones = await getCloudflareZones(c.env);
       const { results: localDomains } = await db.prepare("SELECT * FROM user_domains WHERE is_enabled = 1").all() as any;
       const domainList: DomainInfo[] = await Promise.all(zones.map(async (z) => {
@@ -35,8 +36,9 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
     }
   });
   app.post('/api/domains/toggle', async (c) => {
-    const { domainId, domainName, enabled } = await c.req.json();
     const db = c.env.EMAIL_DB;
+    if (!db) return bad(c, "EMAIL_DB binding is missing");
+    const { domainId, domainName, enabled } = await c.req.json();
     const userId = "u1";
     await db.batch([
       db.prepare("INSERT INTO domains (id, domain_name, is_active) VALUES (?, ?, 1) ON CONFLICT(id) DO NOTHING").bind(domainId, domainName),
@@ -62,7 +64,8 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
   app.get('/api/auth/callback', async (c) => {
     const code = c.req.query('code');
     const { GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, REDIRECT_URI, TOKENS, ENCRYPTION_SECRET } = c.env;
-    if (!code || !GMAIL_CLIENT_ID || !GMAIL_CLIENT_SECRET || !REDIRECT_URI || !TOKENS || !ENCRYPTION_SECRET) return bad(c, "Missing config");
+    if (!TOKENS) return bad(c, "TOKENS KV binding is missing");
+    if (!code || !GMAIL_CLIENT_ID || !GMAIL_CLIENT_SECRET || !REDIRECT_URI || !ENCRYPTION_SECRET) return bad(c, "Missing config/secrets for OAuth");
     try {
       const response = await fetch("https://oauth2.googleapis.com/token", {
         method: "POST",
@@ -74,12 +77,12 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
         await TOKENS.put("gmail_refresh_token", await encrypt(data.refresh_token, ENCRYPTION_SECRET));
         return c.redirect('/settings?auth=success');
       }
-      return bad(c, "No refresh token received");
+      return bad(c, "No refresh token received from Google");
     } catch (e) { return internalError(c, String(e)); }
   });
   app.get('/api/auth/status', async (c) => {
     const kv = c.env.TOKENS;
-    if (!kv) return ok(c, { connected: false });
+    if (!kv) return ok(c, { connected: false, error: "KV_MISSING" });
     const token = await kv.get("gmail_refresh_token");
     return ok(c, { connected: !!token });
   });
@@ -90,6 +93,7 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
   });
   app.post('/api/emails/send', async (c) => {
     const db = c.env.EMAIL_DB;
+    if (!db) return bad(c, "EMAIL_DB binding is missing");
     const { to, subject, body, threadId, fromEmail } = await c.req.json();
     const accessToken = await getGmailAccessToken(c.env);
     let senderEmail = "user@aeromail.dev";
@@ -120,6 +124,7 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
   });
   app.get('/api/emails', async (c) => {
     const db = c.env.EMAIL_DB;
+    if (!db) return bad(c, "EMAIL_DB binding is missing");
     const folder = c.req.query('folder') || 'inbox';
     const { results } = await db.prepare(`
       SELECT t.*,
@@ -138,6 +143,7 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
   });
   app.get('/api/threads/:id', async (c) => {
     const db = c.env.EMAIL_DB;
+    if (!db) return bad(c, "EMAIL_DB binding is missing");
     const id = c.req.param('id');
     const thread = await db.prepare("SELECT * FROM threads WHERE id = ?").bind(id).first() as any;
     if (!thread) return notFound(c, "Thread not found");
@@ -160,24 +166,24 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
   });
   app.patch('/api/threads/:id', async (c) => {
     const db = c.env.EMAIL_DB;
-    const id = c.param('id');
+    if (!db) return bad(c, "EMAIL_DB binding is missing");
+    const id = c.req.param('id');
     const { folder, isStarred, isRead } = await c.req.json();
     const updates: string[] = [];
     const params: any[] = [];
-    // Batch updates for both threads and emails tables
     const batchOps = [];
-    if (folder !== undefined) { 
-      updates.push("folder = ?"); 
-      params.push(folder); 
+    if (folder !== undefined) {
+      updates.push("folder = ?");
+      params.push(folder);
       batchOps.push(db.prepare("UPDATE emails SET folder = ? WHERE thread_id = ?").bind(folder, id));
     }
-    if (isStarred !== undefined) { 
-      updates.push("is_starred = ?"); 
-      params.push(isStarred ? 1 : 0); 
+    if (isStarred !== undefined) {
+      updates.push("is_starred = ?");
+      params.push(isStarred ? 1 : 0);
     }
     if (isRead !== undefined) {
       updates.push("unread_count = ?");
-      params.push(isRead ? 0 : 1); // Mock behavior: unread_count is simplified
+      params.push(isRead ? 0 : 1);
       batchOps.push(db.prepare("UPDATE emails SET is_read = ? WHERE thread_id = ?").bind(isRead ? 1 : 0, id));
     }
     if (updates.length > 0) {
@@ -196,6 +202,7 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
   });
   app.post('/api/simulate/inbound', async (c) => {
     const db = c.env.EMAIL_DB;
+    if (!db) return bad(c, "EMAIL_DB binding is missing");
     const id = crypto.randomUUID();
     const tid = crypto.randomUUID().slice(0, 8);
     const ts = Date.now();
