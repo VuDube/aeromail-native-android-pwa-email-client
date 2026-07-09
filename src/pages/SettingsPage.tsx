@@ -19,10 +19,11 @@ import {
   RefreshCw,
   Link as LinkIcon,
   Unlink,
-  AlertCircle,
   CheckCircle2,
   Loader2,
-  Globe
+  Globe,
+  Bug,
+  Terminal
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useSearchParams, Link } from 'react-router-dom';
@@ -33,7 +34,11 @@ export function SettingsPage() {
   const [searchParams] = useSearchParams();
   const { data: status } = useQuery({ queryKey: ['status'], queryFn: () => api<any>('/api/status') });
   const { data: authStatus, isLoading: isAuthLoading } = useQuery({ queryKey: ['auth-status'], queryFn: () => api<{ connected: boolean }>('/api/auth/status') });
-  const { data: domains, isLoading: isDomainsLoading, refetch: refetchDomains } = useQuery({ queryKey: ['domains'], queryFn: () => api<DomainInfo[]>('/api/domains'), enabled: !!status?.cf_token_ready });
+  const { data: domains, isLoading: isDomainsLoading, refetch: refetchDomains } = useQuery({ 
+    queryKey: ['domains'], 
+    queryFn: () => api<DomainInfo[]>('/api/domains'),
+    enabled: !!status?.cf_token_ready 
+  });
   const toggleDomain = useMutation({
     mutationFn: (vars: { id: string, name: string, enabled: boolean }) => api('/api/domains/toggle', { method: 'POST', body: JSON.stringify({ domainId: vars.id, domainName: vars.name, enabled: vars.enabled }) }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['domains'] })
@@ -44,6 +49,14 @@ export function SettingsPage() {
       toast.success("Disconnected from Google");
       queryClient.invalidateQueries({ queryKey: ['auth-status'] });
     }
+  });
+  const simulateMutation = useMutation({
+    mutationFn: () => api('/api/simulate/inbound', { method: 'POST' }),
+    onSuccess: () => {
+      toast.success("Mock email injected into Inbox");
+      queryClient.invalidateQueries({ queryKey: ['threads'] });
+    },
+    onError: () => toast.error("Simulation failed")
   });
   useEffect(() => {
     if (searchParams.get('auth') === 'success') {
@@ -60,6 +73,30 @@ export function SettingsPage() {
             <p className="text-muted-foreground font-medium">Manage your AeroMail experience</p>
           </header>
           <div className="grid gap-8 max-w-4xl pb-40">
+            {/* Developer Simulation Engine */}
+            <section className="space-y-4">
+              <div className="flex items-center gap-2 text-primary font-black uppercase tracking-widest text-xs">
+                <Bug className="h-4 w-4" /> Simulation Engine
+              </div>
+              <Card className="rounded-m3-xl border-none bg-primary/5 shadow-sm border border-primary/10">
+                <CardHeader>
+                  <CardTitle className="text-lg font-bold flex items-center gap-2">
+                    <Terminal className="h-5 w-5 text-primary" /> Inbound Simulation
+                  </CardTitle>
+                  <CardDescription>Test the end-to-end routing flow without actual SMTP traffic.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <Button 
+                    onClick={() => simulateMutation.mutate()} 
+                    disabled={simulateMutation.isPending}
+                    className="w-full rounded-full bg-primary text-white font-bold h-12 shadow-lg shadow-primary/20 gap-3"
+                  >
+                    {simulateMutation.isPending ? <Loader2 className="h-5 w-5 animate-spin" /> : <Zap className="h-5 w-5" />}
+                    Trigger Mock Inbound Email
+                  </Button>
+                </CardContent>
+              </Card>
+            </section>
             {/* Cloudflare Domains Section */}
             <section className="space-y-4">
               <div className="flex items-center justify-between">
@@ -109,15 +146,13 @@ export function SettingsPage() {
                               </div>
                             </div>
                           </div>
-                          <Switch 
-                            checked={d.localEnabled} 
+                          <Switch
+                            checked={d.localEnabled}
+                            disabled={toggleDomain.isPending}
                             onCheckedChange={(val) => toggleDomain.mutate({ id: d.id, name: d.name, enabled: val })}
                           />
                         </div>
                       ))}
-                      {domains?.length === 0 && (
-                        <p className="text-center py-8 text-sm text-surface-on-variant">No domains found in your Cloudflare account.</p>
-                      )}
                     </div>
                   )}
                 </CardContent>
@@ -147,9 +182,16 @@ export function SettingsPage() {
                       </div>
                     </div>
                     {isAuthLoading ? <Loader2 className="h-5 w-5 animate-spin text-primary" /> : authStatus?.connected ? (
-                      <Button variant="ghost" onClick={() => disconnectMutation.mutate()} className="rounded-full text-destructive font-bold"><Unlink className="h-4 w-4 mr-2" /> Disconnect</Button>
+                      <Button 
+                        variant="ghost" 
+                        onClick={() => disconnectMutation.mutate()} 
+                        disabled={disconnectMutation.isPending}
+                        className="rounded-full text-destructive font-bold"
+                      >
+                        <Unlink className="h-4 w-4 mr-2" /> Disconnect
+                      </Button>
                     ) : (
-                      <Button asChild className="rounded-full bg-primary text-white font-bold"><a href="/api/auth/login">Connect</a></Button>
+                      <Button asChild className="rounded-full bg-primary text-white font-bold h-11 px-6"><a href="/api/auth/login">Connect</a></Button>
                     )}
                   </div>
                 </CardContent>

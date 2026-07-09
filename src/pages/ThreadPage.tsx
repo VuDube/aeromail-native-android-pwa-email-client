@@ -5,7 +5,7 @@ import { api } from '@/lib/api-client';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Email, EmailThread, DomainInfo } from '@shared/types';
 import { format } from 'date-fns';
-import { ArrowLeft, Archive, Trash2, Star, Reply, Send, Loader2, ChevronDown, Globe } from 'lucide-react';
+import { ArrowLeft, Reply, Send, Loader2, ChevronDown } from 'lucide-react';
 import DOMPurify from 'dompurify';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
@@ -50,16 +50,34 @@ export function ThreadPage() {
   const [selectedFrom, setSelectedFrom] = useState('user@aeromail.dev');
   const { data: domains } = useQuery({ queryKey: ['domains'], queryFn: () => api<DomainInfo[]>('/api/domains') });
   const enabledDomains = useMemo(() => domains?.filter(d => d.localEnabled) || [], [domains]);
-  const { data: threadData, isLoading } = useQuery<Email & { thread: EmailThread }>({ queryKey: ['thread', id], queryFn: () => api<Email & { thread: EmailThread }>(`/api/threads/${id}`), enabled: !!id });
-  const thread = threadData?.thread;
-  const messages = thread?.messages || [];
+  const { data: threadData, isLoading } = useQuery<{ thread: EmailThread }>({ 
+    queryKey: ['thread', id], 
+    queryFn: () => api<{ thread: EmailThread }>(`/api/threads/${id}`), 
+    enabled: !!id 
+  });
+  const markAsRead = useMutation({
+    mutationFn: () => api(`/api/threads/${id}`, { method: 'PATCH', body: JSON.stringify({ isRead: true }) }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['threads'] })
+  });
+  useEffect(() => {
+    if (id) markAsRead.mutate();
+  }, [id]);
   useEffect(() => {
     if (enabledDomains.length > 0 && selectedFrom === 'user@aeromail.dev') {
       setSelectedFrom(`hello@${enabledDomains[0].name}`);
     }
   }, [enabledDomains, selectedFrom]);
   const sendReply = useMutation({
-    mutationFn: (body: string) => api('/api/emails/send', { method: 'POST', body: JSON.stringify({ to: messages[messages.length - 1]?.from.email, subject: `Re: ${thread?.subject}`, body, threadId: thread?.id, fromEmail: selectedFrom }) }),
+    mutationFn: (body: string) => api('/api/emails/send', { 
+      method: 'POST', 
+      body: JSON.stringify({ 
+        to: thread?.messages?.[thread.messages.length - 1]?.from.email, 
+        subject: `Re: ${thread?.subject}`, 
+        body, 
+        threadId: thread?.id, 
+        fromEmail: selectedFrom 
+      }) 
+    }),
     onSuccess: () => {
       toast.success("Reply sent");
       setReplyBody('');
@@ -67,6 +85,8 @@ export function ThreadPage() {
       queryClient.invalidateQueries({ queryKey: ['thread', id] });
     },
   });
+  const thread = threadData?.thread;
+  const messages = thread?.messages || [];
   if (isLoading) return <AppLayout><div className="flex h-full items-center justify-center py-40"><Loader2 className="animate-spin text-primary/20 h-10 w-10" /></div></AppLayout>;
   if (!thread) return <AppLayout><div className="max-w-7xl mx-auto px-4 py-20 text-center"><h2 className="text-2xl font-black mb-4">Not found</h2><Button onClick={() => navigate('/')}>Back</Button></div></AppLayout>;
   return (
@@ -82,7 +102,12 @@ export function ThreadPage() {
             </header>
             <div className="space-y-6">
               {messages.map((msg, idx) => (
-                <MessageCard key={msg.id} msg={msg} isLatest={idx === messages.length - 1} isSameSenderAsPrev={idx > 0 && messages[idx-1].from.email === msg.from.email} />
+                <MessageCard 
+                  key={msg.id} 
+                  msg={msg} 
+                  isLatest={idx === messages.length - 1} 
+                  isSameSenderAsPrev={idx > 0 && messages[idx-1].from.email === msg.from.email} 
+                />
               ))}
             </div>
             <div className="fixed bottom-0 left-0 lg:left-72 right-0 p-6 z-[40] bg-gradient-to-t from-background via-background/95 to-transparent pt-20">

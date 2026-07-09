@@ -41,7 +41,7 @@ export interface EmailThread {
   lastMessageAt: number;
   snippet: string;
   subject: string;
-  messages: Email[];
+  messages?: Email[];
   participantNames: string[];
   unreadCount: number;
   isStarred: boolean;
@@ -54,8 +54,7 @@ export interface DomainInfo {
   isRoutingEnabled: boolean;
   localEnabled: boolean;
 }
-export interface UserDomain {
-  userId: string;
-  domainId: string;
-  isEnabled: boolean;
+export interface SimulateResponse {
+  success: boolean;
+  threadId: string;
 }
