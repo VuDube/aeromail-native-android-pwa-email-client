@@ -11,7 +11,7 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
   });
   app.get('/api/auth/login', async (c) => {
     const { GMAIL_CLIENT_ID, REDIRECT_URI } = c.env;
-    if (!GMAIL_CLIENT_ID || !REDIRECT_URI) return bad(c, "OAuth configuration missing");
+    if (!GMAIL_CLIENT_ID || !REDIRECT_URI) return bad(c, "OAuth configuration missing: GMAIL_CLIENT_ID or REDIRECT_URI");
     const scopes = [
       'https://www.googleapis.com/auth/gmail.send',
       'https://www.googleapis.com/auth/userinfo.email',
@@ -31,7 +31,7 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
     const code = c.req.query('code');
     const { GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, REDIRECT_URI, ENCRYPTION_SECRET, TOKENS } = c.env;
     if (!code || !GMAIL_CLIENT_ID || !GMAIL_CLIENT_SECRET || !REDIRECT_URI || !ENCRYPTION_SECRET || !TOKENS) {
-      return bad(c, "Missing callback parameters or server config");
+      return bad(c, "Missing callback parameters or server-side infrastructure (KV/Secrets)");
     }
     try {
       const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
@@ -46,9 +46,14 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
         }),
       });
       const tokens = await tokenRes.json() as any;
+      if (tokens.error) return bad(c, tokens.error_description || tokens.error);
       if (tokens.refresh_token) {
         const encrypted = await encrypt(tokens.refresh_token, ENCRYPTION_SECRET);
         await TOKENS.put("gmail_refresh_token", encrypted);
+      } else {
+        // If no refresh token, we check if we already have one
+        const existing = await TOKENS.get("gmail_refresh_token");
+        if (!existing) return bad(c, "No refresh token returned. Try revoking app access in Google settings.");
       }
       return c.redirect('/settings?auth=success');
     } catch (e: any) {
@@ -69,7 +74,7 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
       kv_ready: !!c.env.TOKENS,
       db_ready: !!c.env.EMAIL_DB,
       demo_mode: !c.env.EMAIL_DB,
-      version: '2.0.0-final'
+      version: '2.0.0-production'
     });
   });
   app.patch('/api/threads/:id', async (c) => {
@@ -93,46 +98,55 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
     }
     if (updates.length === 0) return bad(c, "No valid updates provided");
     params.push(id);
-    await db.prepare(`UPDATE threads SET ${updates.join(', ')} WHERE id = ?`).bind(...params).run();
-    // Propagate starred/read status to emails if applicable
-    if (body.isStarred !== undefined) {
-      await db.prepare("UPDATE emails SET is_starred = ? WHERE thread_id = ?").bind(body.isStarred ? 1 : 0, id).run();
+    try {
+      await db.prepare(`UPDATE threads SET ${updates.join(', ')} WHERE id = ?`).bind(...params).run();
+      // Propagate starred/read status to individual emails in the thread
+      if (body.isStarred !== undefined) {
+        await db.prepare("UPDATE emails SET is_starred = ? WHERE thread_id = ?").bind(body.isStarred ? 1 : 0, id).run();
+      }
+      if (body.isRead !== undefined) {
+        await db.prepare("UPDATE emails SET is_read = ? WHERE thread_id = ?").bind(body.isRead ? 1 : 0, id).run();
+      }
+      return ok(c, { id, updated: true });
+    } catch (e: any) {
+      return internalError(c, e.message);
     }
-    if (body.isRead !== undefined) {
-      await db.prepare("UPDATE emails SET is_read = ? WHERE thread_id = ?").bind(body.isRead ? 1 : 0, id).run();
-    }
-    return ok(c, { id, updated: true });
   });
   app.post('/api/domains/toggle', async (c) => {
     const db = c.env.EMAIL_DB;
-    if (!db) return bad(c, "D1 required for domain management");
+    if (!db) return bad(c, "D1 Database required for domain management");
     const { domainId, domainName, enabled } = await c.req.json();
-    if (enabled) {
-      await db.batch([
-        db.prepare("INSERT OR IGNORE INTO domains (id, domain_name, is_active) VALUES (?, ?, 1)").bind(domainId, domainName),
-        db.prepare("INSERT OR IGNORE INTO user_domains (user_id, domain_id) VALUES (?, ?)").bind('me', domainId)
-      ]);
-    } else {
-      await db.prepare("DELETE FROM user_domains WHERE domain_id = ?").bind(domainId).run();
+    if (!domainId || !domainName) return bad(c, "domainId and domainName required");
+    try {
+      if (enabled) {
+        await db.batch([
+          db.prepare("INSERT OR IGNORE INTO domains (id, domain_name, is_active) VALUES (?, ?, 1)").bind(domainId, domainName),
+          db.prepare("INSERT OR IGNORE INTO user_domains (user_id, domain_id) VALUES (?, ?)").bind('me', domainId)
+        ]);
+      } else {
+        await db.prepare("DELETE FROM user_domains WHERE domain_id = ? AND user_id = ?").bind(domainId, 'me').run();
+      }
+      return ok(c, { domainId, enabled });
+    } catch (e: any) {
+      return internalError(c, e.message);
     }
-    return ok(c, { domainId, enabled });
   });
   app.get('/api/domains', async (c) => {
     const db = c.env.EMAIL_DB;
     if (!db) return ok(c, []);
     try {
-      const { results: localDomains } = await db.prepare("SELECT domain_id FROM user_domains").all() as any;
+      const { results: localDomains } = await db.prepare("SELECT domain_id FROM user_domains WHERE user_id = 'me'").all() as any;
       const localSet = new Set(localDomains.map((ld: any) => ld.domain_id));
       const { results: zones } = await db.prepare("SELECT * FROM domains").all() as any;
-      // In a real environment, we'd fetch from CF API here if tokens are present
       return ok(c, zones.map((z: any) => ({
         id: z.id,
         name: z.domain_name,
-        status: 'active',
+        status: z.is_active ? 'active' : 'inactive',
         isRoutingEnabled: true,
         localEnabled: localSet.has(z.id)
       })));
     } catch (e: any) {
+      console.error("[DOMAINS API ERROR]", e);
       return ok(c, []);
     }
   });
@@ -152,10 +166,10 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
           folder: e.folder as any,
           participantNames: [e.from.name]
         }));
-      return c.json({ success: true, data: mockThreads, meta: { demo_mode: true } });
+      return ok(c, mockThreads);
     }
     const { results } = await db.prepare(`
-      SELECT t.*,
+      SELECT t.*, 
       (SELECT GROUP_CONCAT(from_name, ', ') FROM (SELECT DISTINCT from_name FROM emails WHERE thread_id = t.id)) as participantNames
       FROM threads t
       WHERE (? = 'starred' AND is_starred = 1) OR folder = ?

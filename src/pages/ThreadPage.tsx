@@ -24,7 +24,7 @@ export function ThreadPage() {
     queryFn: () => api<DomainInfo[]>('/api/domains')
   });
   const enabledDomains = useMemo(() => domains?.filter(d => d.localEnabled) || [], [domains]);
-  const { data: threadData, isLoading } = useQuery<{ thread: EmailThread }>({
+  const { data: threadData, isLoading, error } = useQuery<{ thread: EmailThread }>({
     queryKey: ['thread', id],
     queryFn: () => api<{ thread: EmailThread }>(`/api/threads/${id}`),
     enabled: !!id
@@ -32,12 +32,13 @@ export function ThreadPage() {
   const thread = threadData?.thread;
   const messages = thread?.messages || [];
   const markAsRead = useMutation({
-    mutationFn: (threadId: string) => api(`/api/threads/${threadId}`, { 
-      method: 'PATCH', 
-      body: JSON.stringify({ isRead: true }) 
+    mutationFn: (threadId: string) => api(`/api/threads/${threadId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ isRead: true })
     }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['threads'] });
+      queryClient.invalidateQueries({ queryKey: ['thread', id] });
     }
   });
   useEffect(() => {
@@ -74,7 +75,7 @@ export function ThreadPage() {
     onError: (err: any) => toast.error(err.message || "Failed to send")
   });
   if (isLoading) return <AppLayout><div className="flex h-full items-center justify-center py-40"><Loader2 className="animate-spin text-primary/20 h-10 w-10" /></div></AppLayout>;
-  if (!thread) return <AppLayout><div className="max-w-7xl mx-auto px-4 py-20 text-center"><h2>Not found</h2><Button onClick={() => navigate('/')}>Back</Button></div></AppLayout>;
+  if (error || !thread) return <AppLayout><div className="max-w-7xl mx-auto px-4 py-20 text-center"><h2 className="text-xl font-bold mb-4">Conversation not found</h2><Button onClick={() => navigate('/')}>Return to Inbox</Button></div></AppLayout>;
   return (
     <AppLayout>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -100,7 +101,12 @@ export function ThreadPage() {
               <div className="max-w-4xl mx-auto px-4 md:px-8">
                 <AnimatePresence mode="wait">
                   {isReplying ? (
-                    <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 20, opacity: 0 }} className="bg-surface-1 shadow-2xl rounded-m3-xl border border-primary/20 overflow-hidden flex flex-col">
+                    <motion.div 
+                      initial={{ y: 20, opacity: 0 }} 
+                      animate={{ y: 0, opacity: 1 }} 
+                      exit={{ y: 20, opacity: 0 }} 
+                      className="bg-surface-1 shadow-2xl rounded-m3-xl border border-primary/20 overflow-hidden flex flex-col"
+                    >
                       <div className="px-8 py-4 border-b flex items-center justify-between bg-surface-2/50 shrink-0">
                         <div className="flex items-center gap-3">
                           <span className="text-[10px] font-black uppercase tracking-[0.2em] text-primary">From</span>
@@ -119,12 +125,22 @@ export function ThreadPage() {
                         <Button variant="ghost" size="icon" onClick={() => setIsReplying(false)} className="rounded-full"><ChevronDown className="h-5 w-5" /></Button>
                       </div>
                       <div className="p-8">
-                        <Textarea autoFocus value={replyBody} onChange={(e) => setReplyBody(e.target.value)} placeholder="Type your message..." className="min-h-[150px] bg-transparent border-none focus-visible:ring-0 text-base p-0 resize-none" />
+                        <Textarea 
+                          autoFocus 
+                          value={replyBody} 
+                          onChange={(e) => setReplyBody(e.target.value)} 
+                          placeholder="Type your message..." 
+                          className="min-h-[150px] bg-transparent border-none focus-visible:ring-0 text-base p-0 resize-none shadow-none" 
+                        />
                       </div>
                       <div className="px-8 py-4 border-t flex items-center justify-end bg-surface-2/30 gap-4">
                         <Button variant="ghost" onClick={() => setIsReplying(false)} className="rounded-full font-bold">Discard</Button>
-                        <Button onClick={() => sendReply.mutate(replyBody)} disabled={!replyBody.trim() || sendReply.isPending} className="rounded-full px-10 bg-primary text-white font-bold h-11">
-                          {sendReply.isPending ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />} Send
+                        <Button 
+                          onClick={() => sendReply.mutate(replyBody)} 
+                          disabled={!replyBody.trim() || sendReply.isPending} 
+                          className="rounded-full px-10 bg-primary text-white font-bold h-11"
+                        >
+                          {sendReply.isPending ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5 mr-2" />} Send
                         </Button>
                       </div>
                     </motion.div>
