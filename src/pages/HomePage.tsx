@@ -1,11 +1,11 @@
-import React, { useState, useMemo, forwardRef } from 'react';
+import React, { useState, useMemo, forwardRef, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useParams, Link } from 'react-router-dom';
 import { api } from '@/lib/api-client';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { EmailThread } from '@shared/types';
 import { format } from 'date-fns';
-import { Plus, Search, Star, Loader2, RefreshCw, Archive, MailOpen, Inbox as InboxIcon, Sparkles, CloudOff } from 'lucide-react';
+import { Plus, Search, Star, Loader2, RefreshCw, Archive, MailOpen, Inbox as InboxIcon, Sparkles } from 'lucide-react';
 import { motion, AnimatePresence, useMotionValue, useTransform } from 'framer-motion';
 import { useSwipeable } from 'react-swipeable';
 import { Input } from '@/components/ui/input';
@@ -28,9 +28,18 @@ const SwipeableThreadCard = forwardRef<HTMLDivElement, SwipeableThreadCardProps>
     const scale = useTransform(x, [-100, 0, 100], [0.95, 1, 0.95]);
     const opacity = useTransform(x, [-150, 0, 150], [0, 1, 0]);
     const isRead = thread.unreadCount === 0;
-    const latestMessageId = thread.messages[thread.messages.length - 1]?.id;
+    // Safety check for latest message
+    const latestMessageId = thread.messages?.length > 0 
+      ? thread.messages[thread.messages.length - 1].id 
+      : thread.id;
     const handlers = useSwipeable({
-      onSwiping: (e) => x.set(e.deltaX * 0.6),
+      onSwiping: (e) => {
+        const threshold = 120;
+        if (Math.abs(e.deltaX) >= threshold && Math.abs(x.get()) < threshold) {
+          if ('vibrate' in navigator) navigator.vibrate(10);
+        }
+        x.set(e.deltaX * 0.6);
+      },
       onSwipedLeft: (e) => {
         if (Math.abs(e.deltaX) > 120) onArchive(latestMessageId);
         x.set(0);
@@ -44,7 +53,13 @@ const SwipeableThreadCard = forwardRef<HTMLDivElement, SwipeableThreadCardProps>
       preventScrollOnSwipe: true,
     });
     return (
-      <div ref={ref} className="relative overflow-hidden mb-1 rounded-m3-lg group snap-start">
+      <motion.div 
+        ref={ref} 
+        initial={{ opacity: 0, x: -10 }}
+        animate={{ opacity: 1, x: 0 }}
+        transition={{ delay: Math.min(idx * 0.05, 0.5) }}
+        className="relative overflow-hidden mb-1 rounded-m3-lg group snap-start"
+      >
         <div className="absolute inset-0 flex items-center justify-between px-8 z-0 pointer-events-none">
           <motion.div style={{ opacity: useTransform(x, [0, 100], [0, 1]) }} className="flex items-center gap-2 text-green-600 font-bold">
             <MailOpen className="h-6 w-6" /> <span>Read</span>
@@ -57,7 +72,7 @@ const SwipeableThreadCard = forwardRef<HTMLDivElement, SwipeableThreadCardProps>
           {...handlers}
           style={{ x, scale, opacity }}
           className={cn(
-            "relative z-10 flex items-start gap-4 transition-colors border-b border-surface-variant/10",
+            "relative z-10 flex items-start gap-4 transition-colors border-b border-surface-variant/10 cursor-pointer",
             density === 'compact' ? "p-3" : "p-5",
             isRead ? 'bg-background hover:bg-surface-1' : 'bg-primary/5 hover:bg-primary/10 border-l-4 border-l-primary'
           )}
@@ -68,7 +83,7 @@ const SwipeableThreadCard = forwardRef<HTMLDivElement, SwipeableThreadCardProps>
                 {thread.participantNames[0]?.charAt(0) || 'A'}
               </AvatarFallback>
             </Avatar>
-            <button 
+            <button
               onClick={(e) => { e.preventDefault(); e.stopPropagation(); onToggleStar(latestMessageId, thread.isStarred); }}
               className="p-1 rounded-full hover:bg-surface-variant/20 transition-colors"
             >
@@ -92,7 +107,7 @@ const SwipeableThreadCard = forwardRef<HTMLDivElement, SwipeableThreadCardProps>
             </p>
           </Link>
         </motion.div>
-      </div>
+      </motion.div>
     );
   }
 );
@@ -102,26 +117,30 @@ export function HomePage() {
   const { folder = 'inbox' } = useParams<{ folder: string }>();
   const [searchQuery, setSearchQuery] = useState('');
   const { density } = useDensity();
-  const { data: status } = useQuery({ queryKey: ['status'], queryFn: () => api<any>('/api/status') });
   const { data: threads, isLoading, isFetching, error } = useQuery<EmailThread[]>({
     queryKey: ['threads', folder],
     queryFn: () => api<EmailThread[]>(`/api/emails?folder=${folder}`),
+    refetchOnWindowFocus: true,
   });
   const filteredThreads = useMemo(() => {
     if (!threads) return [];
     if (!searchQuery.trim()) return threads;
     const q = searchQuery.toLowerCase();
-    return threads.filter(t => 
-      t.subject.toLowerCase().includes(q) || 
+    return threads.filter(t =>
+      t.subject.toLowerCase().includes(q) ||
       t.participantNames.some(p => p.toLowerCase().includes(q)) ||
       t.snippet.toLowerCase().includes(q)
     );
   }, [threads, searchQuery]);
   const toggleMutation = useMutation({
-    mutationFn: ({ id, updates }: { id: string, updates: any }) => 
+    mutationFn: ({ id, updates }: { id: string, updates: any }) =>
       api(`/api/emails/${id}`, { method: 'PATCH', body: JSON.stringify(updates) }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['threads'] })
   });
+  const handleRefresh = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ['threads'] });
+    if ('vibrate' in navigator) navigator.vibrate([10, 30, 10]);
+  }, [queryClient]);
   return (
     <AppLayout>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -133,7 +152,7 @@ export function HomePage() {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search your conversations..."
-                className="w-full h-14 pl-14 pr-6 rounded-2xl bg-surface-2 border-none focus-visible:ring-2 focus-visible:ring-primary shadow-sm text-base font-bold transition-all"
+                className="w-full h-14 pl-14 pr-6 rounded-2xl bg-surface-2 border-none focus-visible:ring-2 focus-visible:ring-primary/50 shadow-sm text-base font-bold transition-all group-focus-within:shadow-[0_0_20px_rgba(var(--primary),0.1)]"
               />
             </motion.div>
             <div className="flex items-center justify-between px-2">
@@ -141,7 +160,12 @@ export function HomePage() {
                 <h1 className="text-4xl font-black tracking-tighter capitalize">{searchQuery ? 'Search' : folder}</h1>
                 {isFetching && <Loader2 className="h-5 w-5 animate-spin text-primary opacity-50" />}
               </div>
-              <Button variant="ghost" size="icon" onClick={() => queryClient.invalidateQueries({ queryKey: ['threads'] })} className="rounded-full bg-surface-1 shadow-sm">
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                onClick={handleRefresh} 
+                className="rounded-full bg-surface-1 shadow-sm active:rotate-180 transition-transform duration-500"
+              >
                 <RefreshCw className="h-5 w-5" />
               </Button>
             </div>

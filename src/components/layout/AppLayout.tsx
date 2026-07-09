@@ -7,19 +7,21 @@ import { Button } from "@/components/ui/button";
 import { motion, AnimatePresence } from "framer-motion";
 import { useDensity } from "@/hooks/use-density";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { useIsFetching } from "@tanstack/react-query";
 const NAV_ITEMS = [
-  { icon: Inbox, label: "Inbox", path: "/", match: (p: string) => p === "/" || p === "/inbox" },
-  { icon: Star, label: "Starred", path: "/starred", match: (p: string) => p === "/starred" },
-  { icon: Send, label: "Sent", path: "/sent", match: (p: string) => p === "/sent" },
-  { icon: Trash2, label: "Trash", path: "/trash", match: (p: string) => p === "/trash" },
+  { id: "nav-inbox", icon: Inbox, label: "Inbox", path: "/", match: (p: string) => p === "/" || p === "/inbox" },
+  { id: "nav-starred", icon: Star, label: "Starred", path: "/starred", match: (p: string) => p === "/starred" },
+  { id: "nav-sent", icon: Send, label: "Sent", path: "/sent", match: (p: string) => p === "/sent" },
+  { id: "nav-trash", icon: Trash2, label: "Trash", path: "/trash", match: (p: string) => p === "/trash" },
 ];
 export function AppLayout({ children }: { children: React.ReactNode }) {
   const isMobile = useIsMobile();
   const location = useLocation();
   const navigate = useNavigate();
   const { density } = useDensity();
+  const isFetching = useIsFetching();
+  const isSyncing = isFetching > 0;
   const [showScrollTop, setShowScrollTop] = useState(false);
-  const [isSyncing, setIsSyncing] = useState(false);
   const pathname = location?.pathname || "/";
   const isActive = (item: typeof NAV_ITEMS[0]) => item.match(pathname);
   useEffect(() => {
@@ -43,13 +45,18 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
       density === 'compact' ? "density-compact" : "density-comfortable"
     )}>
       {/* System Status Line */}
-      <div className="fixed top-0 left-0 right-0 h-[2px] z-[100] pointer-events-none overflow-hidden">
-        <motion.div 
-          className="h-full bg-primary"
-          initial={{ x: "-100%" }}
-          animate={isSyncing ? { x: "100%" } : { x: "-100%" }}
-          transition={isSyncing ? { duration: 1.5, repeat: Infinity, ease: "linear" } : { duration: 0.3 }}
-        />
+      <div className="fixed top-0 left-0 right-0 h-[3px] z-[100] pointer-events-none overflow-hidden">
+        <AnimatePresence>
+          {isSyncing && (
+            <motion.div
+              initial={{ x: "-100%" }}
+              animate={{ x: "100%" }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}
+              className="h-full bg-primary shadow-[0_0_8px_rgba(var(--primary),0.5)] w-1/3"
+            />
+          )}
+        </AnimatePresence>
       </div>
       {!isMobile && (
         <aside className={cn(
@@ -66,6 +73,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                 <Tooltip key={item.label}>
                   <TooltipTrigger asChild>
                     <Link
+                      id={item.id}
                       to={item.path}
                       className={cn(
                         "flex items-center gap-4 px-4 py-3 rounded-full transition-all group relative",
@@ -93,6 +101,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Link
+                    id="nav-settings"
                     to="/settings"
                     className={cn(
                       "flex items-center gap-4 px-4 py-3 rounded-full transition-all group relative",
@@ -132,10 +141,10 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           <AnimatePresence mode="popLayout" initial={false}>
             <motion.div
               key={pathname}
-              initial={{ opacity: 0, x: 8 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -8 }}
-              transition={{ duration: 0.15, ease: [0.4, 0, 0.2, 1] }}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              transition={{ duration: 0.2, ease: [0.4, 0, 0.2, 1] }}
               className="min-h-full"
             >
               {children}
@@ -156,7 +165,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           </AnimatePresence>
         </div>
         {isMobile && !pathname.startsWith('/thread/') && !pathname.startsWith('/compose') && (
-          <nav className="h-16 border-t bg-surface/90 backdrop-blur-xl flex items-center justify-around px-4 shrink-0 z-30">
+          <nav className="h-16 border-t bg-surface/90 backdrop-blur-xl flex items-center justify-around px-4 shrink-0 z-30 touch-none">
             {NAV_ITEMS.map((item) => (
               <Link
                 key={item.label}

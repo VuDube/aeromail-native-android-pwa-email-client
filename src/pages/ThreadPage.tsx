@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, memo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api-client';
@@ -13,17 +13,57 @@ import { Textarea } from '@/components/ui/textarea';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+const MessageCard = memo(({ msg, isLatest, isSameSenderAsPrev }: { msg: Email, isLatest: boolean, isSameSenderAsPrev: boolean }) => (
+  <div className="relative group">
+    {!isSameSenderAsPrev && <div className="h-4" />}
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      className={cn(
+        "rounded-[32px] p-6 transition-all duration-300 border border-surface-variant/10",
+        isLatest ? "bg-surface-1 shadow-xl ring-2 ring-primary/10" : "bg-surface-2 opacity-90 scale-[0.98]"
+      )}
+    >
+      {!isSameSenderAsPrev && (
+        <div className="flex items-center gap-4 mb-6">
+          <Avatar className="h-12 w-12 border-2 border-background shadow-sm">
+            <AvatarImage src={`https://avatar.vercel.sh/${msg.from.email}`} />
+            <AvatarFallback className="bg-primary/10 text-primary font-black text-xl">
+              {msg.from.name.charAt(0)}
+            </AvatarFallback>
+          </Avatar>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center justify-between">
+              <span className="font-black text-on-surface text-lg leading-none">{msg.from.name}</span>
+              <span className="text-xs text-on-surface-variant font-bold opacity-60">
+                {format(msg.timestamp, 'MMM d, h:mm a')}
+              </span>
+            </div>
+            <p className="text-xs text-on-surface-variant font-bold opacity-40 mt-1 truncate">
+              {msg.from.email}
+            </p>
+          </div>
+        </div>
+      )}
+      <div
+        className="prose-email text-on-surface text-base [&>blockquote]:border-l-4 [&>blockquote]:border-primary/20 [&>blockquote]:pl-4 [&>blockquote]:italic [&>ul]:list-disc [&>ul]:pl-5 [&>ol]:list-decimal [&>ol]:pl-5"
+        dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(msg.body) }}
+      />
+    </motion.div>
+  </div>
+));
+MessageCard.displayName = 'MessageCard';
 export function ThreadPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [replyBody, setReplyBody] = React.useState('');
   const [isReplying, setIsReplying] = React.useState(false);
-  const scrollRef = useRef<HTMLDivElement>(null);
   const { data: emailData, isLoading: isEmailLoading } = useQuery<Email & { thread: EmailThread }>({
     queryKey: ['email', id],
     queryFn: () => api<Email & { thread: EmailThread }>(`/api/emails/${id}`),
     enabled: !!id,
+    refetchOnWindowFocus: false,
   });
   const thread = emailData?.thread;
   const messages = thread?.messages || [];
@@ -31,14 +71,17 @@ export function ThreadPage() {
     mutationFn: (threadId: string) => api(`/api/threads/${threadId}/read`, { method: 'POST' }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['threads'] });
-      queryClient.invalidateQueries({ queryKey: ['email', id] });
     },
   });
   useEffect(() => {
+    // Only mark as read if there's an actual unread count to avoid redundant calls
     if (thread?.id && thread.unreadCount > 0 && !markThreadAsRead.isPending) {
-      markThreadAsRead.mutate(thread.id);
+      const timeoutId = setTimeout(() => {
+        markThreadAsRead.mutate(thread.id);
+      }, 1000); // Small delay to ensure user actually started reading
+      return () => clearTimeout(timeoutId);
     }
-  }, [thread?.id, thread?.unreadCount, markThreadAsRead]);
+  }, [thread?.id, thread?.unreadCount]);
   const sendReply = useMutation({
     mutationFn: ({ to, subject, body, threadId }: { to: string; subject: string; body: string; threadId: string }) =>
       api('/api/emails/send', {
@@ -52,6 +95,13 @@ export function ThreadPage() {
       queryClient.invalidateQueries({ queryKey: ['email', id] });
     },
   });
+  const handleBack = () => {
+    if (window.history.length > 2) {
+      navigate(-1);
+    } else {
+      navigate('/');
+    }
+  };
   if (isEmailLoading) {
     return (
       <AppLayout>
@@ -77,7 +127,7 @@ export function ThreadPage() {
         <div className="py-8 md:py-10 lg:py-12 space-y-12 pb-40">
           <header className="sticky top-0 bg-background/80 backdrop-blur-xl z-30 py-4 flex items-center justify-between border-b border-surface-variant/10">
             <div className="flex items-center gap-4 min-w-0">
-              <Button variant="ghost" size="icon" onClick={() => navigate(-1)} className="rounded-full shrink-0">
+              <Button variant="ghost" size="icon" onClick={handleBack} className="rounded-full shrink-0">
                 <ArrowLeft className="h-6 w-6" />
               </Button>
               <h1 className="text-2xl font-black tracking-tighter truncate">{thread.subject}</h1>
@@ -92,50 +142,14 @@ export function ThreadPage() {
             </div>
           </header>
           <div className="space-y-4 relative">
-            {messages.map((msg, idx) => {
-              const isSameSenderAsPrev = idx > 0 && messages[idx-1].from.email === msg.from.email;
-              const isLatest = idx === messages.length - 1;
-              return (
-                <div key={msg.id} className="relative group">
-                  {!isSameSenderAsPrev && idx !== 0 && <div className="h-4" />}
-                  <motion.div
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: idx * 0.1 }}
-                    className={cn(
-                      "rounded-[32px] p-6 transition-all duration-300 border border-surface-variant/10",
-                      isLatest ? "bg-surface-1 shadow-xl ring-2 ring-primary/10" : "bg-surface-2 opacity-90 scale-[0.98]"
-                    )}
-                  >
-                    {!isSameSenderAsPrev && (
-                      <div className="flex items-center gap-4 mb-6">
-                        <Avatar className="h-12 w-12 border-2 border-background shadow-sm">
-                          <AvatarImage src={`https://avatar.vercel.sh/${msg.from.email}`} />
-                          <AvatarFallback className="bg-primary/10 text-primary font-black text-xl">
-                            {msg.from.name.charAt(0)}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center justify-between">
-                            <span className="font-black text-on-surface text-lg leading-none">{msg.from.name}</span>
-                            <span className="text-xs text-on-surface-variant font-bold opacity-60">
-                              {format(msg.timestamp, 'MMM d, h:mm a')}
-                            </span>
-                          </div>
-                          <p className="text-xs text-on-surface-variant font-bold opacity-40 mt-1 truncate">
-                            {msg.from.email}
-                          </p>
-                        </div>
-                      </div>
-                    )}
-                    <div
-                      className="prose-email text-on-surface text-base"
-                      dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(msg.body) }}
-                    />
-                  </motion.div>
-                </div>
-              );
-            })}
+            {messages.map((msg, idx) => (
+              <MessageCard 
+                key={msg.id} 
+                msg={msg} 
+                isLatest={idx === messages.length - 1} 
+                isSameSenderAsPrev={idx > 0 && messages[idx-1].from.email === msg.from.email} 
+              />
+            ))}
           </div>
           <div className="fixed bottom-0 left-0 lg:left-72 right-0 p-6 z-40">
             <div className="max-w-4xl mx-auto">
@@ -143,9 +157,10 @@ export function ThreadPage() {
                 {isReplying ? (
                   <motion.div
                     key="reply-card"
-                    initial={{ y: 100, opacity: 0 }}
+                    initial={{ y: 50, opacity: 0 }}
                     animate={{ y: 0, opacity: 1 }}
                     exit={{ y: 100, opacity: 0 }}
+                    transition={{ type: "spring", damping: 25, stiffness: 300 }}
                     className="bg-surface shadow-2xl rounded-[32px] border-2 border-primary/20 overflow-hidden"
                   >
                     <div className="px-6 py-4 border-b flex items-center justify-between bg-surface-1">
@@ -186,7 +201,11 @@ export function ThreadPage() {
                     </div>
                   </motion.div>
                 ) : (
-                  <div className="flex gap-4">
+                  <motion.div 
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    className="flex gap-4"
+                  >
                     <Button
                       onClick={() => setIsReplying(true)}
                       className="flex-1 rounded-full h-16 bg-primary text-white font-black text-xl shadow-2xl shadow-primary/30 gap-4"
@@ -196,7 +215,7 @@ export function ThreadPage() {
                     <Button variant="outline" className="flex-1 rounded-full h-16 border-surface-variant font-black text-xl bg-surface-1 shadow-sm">
                       Forward
                     </Button>
-                  </div>
+                  </motion.div>
                 )}
               </AnimatePresence>
             </div>

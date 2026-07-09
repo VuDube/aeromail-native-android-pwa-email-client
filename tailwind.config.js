@@ -18,6 +18,16 @@ export default {
         'm3-lg': '16px',
         'm3-md': '12px',
   		},
+      spacing: {
+        'm3-margin': '16px',
+        'm3-gutter': '24px',
+      },
+      transitionTimingFunction: {
+        'm3-standard': 'cubic-bezier(0.4, 0, 0.2, 1)',
+        'm3-emphasized': 'cubic-bezier(0.2, 0, 0, 1)',
+        'm3-decelerate': 'cubic-bezier(0, 0, 0.2, 1)',
+        'm3-accelerate': 'cubic-bezier(0.3, 0, 1, 1)',
+      },
   		colors: {
   			background: 'hsl(var(--background))',
   			foreground: 'hsl(var(--foreground))',
