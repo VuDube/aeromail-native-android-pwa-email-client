@@ -1,76 +1,48 @@
-import '@/lib/errorReporter';
-import { enableMapSet } from "immer";
-enableMapSet();
 import React from 'react'
 import { createRoot } from 'react-dom/client'
-import {
-  createBrowserRouter,
-  RouterProvider,
-} from "react-router-dom";
+import { createBrowserRouter, RouterProvider } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { enableMapSet } from "immer";
+import '@/lib/errorReporter';
+import '@/index.css'
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { RouteErrorBoundary } from '@/components/RouteErrorBoundary';
-import '@/index.css'
 import { HomePage } from '@/pages/HomePage'
 import { ThreadPage } from '@/pages/ThreadPage'
 import { ComposePage } from '@/pages/ComposePage'
 import { DocsPage } from '@/pages/DocsPage'
 import { SettingsPage } from '@/pages/SettingsPage'
-// Initialize QueryClient outside of component to ensure stability
+enableMapSet();
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      retry: 1,
+      retry: false, // Prevent loop on infrastructure failure
       refetchOnWindowFocus: false,
       staleTime: 5 * 60 * 1000,
     },
   },
 });
-console.log("[AeroMail] Initializing Application Root...");
 const router = createBrowserRouter([
-  {
-    path: "/",
-    element: <HomePage />,
-    errorElement: <RouteErrorBoundary />,
-  },
-  {
-    path: "/settings",
-    element: <SettingsPage />,
-    errorElement: <RouteErrorBoundary />,
-  },
-  {
-    path: "/docs",
-    element: <DocsPage />,
-    errorElement: <RouteErrorBoundary />,
-  },
-  {
-    path: "/thread/:id",
-    element: <ThreadPage />,
-    errorElement: <RouteErrorBoundary />,
-  },
-  {
-    path: "/compose",
-    element: <ComposePage />,
-    errorElement: <RouteErrorBoundary />,
-  },
-  {
-    path: "/:folder",
-    element: <HomePage />,
-    errorElement: <RouteErrorBoundary />,
-  },
+  { path: "/", element: <HomePage />, errorElement: <RouteErrorBoundary /> },
+  { path: "/settings", element: <SettingsPage />, errorElement: <RouteErrorBoundary /> },
+  { path: "/docs", element: <DocsPage />, errorElement: <RouteErrorBoundary /> },
+  { path: "/thread/:id", element: <ThreadPage />, errorElement: <RouteErrorBoundary /> },
+  { path: "/compose", element: <ComposePage />, errorElement: <RouteErrorBoundary /> },
+  { path: "/:folder", element: <HomePage />, errorElement: <RouteErrorBoundary /> },
 ]);
-createRoot(document.getElementById('root')!).render(
-  <QueryClientProvider client={queryClient}>
-    <ErrorBoundary>
-      <RouterProvider router={router} />
-    </ErrorBoundary>
-  </QueryClientProvider>
-)
+const rootElement = document.getElementById('root');
+if (!rootElement) throw new Error("Failed to find root element");
+createRoot(rootElement).render(
+  <React.StrictMode>
+    <QueryClientProvider client={queryClient}>
+      <ErrorBoundary>
+        <RouterProvider router={router} />
+      </ErrorBoundary>
+    </QueryClientProvider>
+  </React.StrictMode>
+);
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').then(
-      (reg) => console.log('SW registered:', reg.scope),
-      (err) => console.error('SW registration failed:', err)
-    );
+    navigator.serviceWorker.register('/sw.js').catch(err => console.error('SW registration failed:', err));
   });
 }
