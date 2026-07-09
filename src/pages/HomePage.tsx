@@ -4,7 +4,7 @@ import { useParams, Link } from 'react-router-dom';
 import { api } from '@/lib/api-client';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { EmailThread } from '@shared/types';
-import { Plus, Search, Loader2, RefreshCw, Inbox as InboxIcon, Sparkles, Info } from 'lucide-react';
+import { Plus, Search, Loader2, RefreshCw, Inbox as InboxIcon, Sparkles, Info, ArrowRight } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -16,9 +16,9 @@ export function HomePage() {
   const { folder = 'inbox' } = useParams<{ folder: string }>();
   const [searchQuery, setSearchQuery] = useState('');
   const { density } = useDensity();
-  const { data: status } = useQuery({ 
-    queryKey: ['status'], 
-    queryFn: () => api<any>('/api/status') 
+  const { data: status } = useQuery({
+    queryKey: ['status'],
+    queryFn: () => api<any>('/api/status')
   });
   const { data: threads, isLoading, isFetching, error } = useQuery<EmailThread[]>({
     queryKey: ['threads', folder],
@@ -46,10 +46,22 @@ export function HomePage() {
   if (error) {
     return (
       <AppLayout>
-        <div className="max-w-7xl mx-auto px-4 py-40 flex flex-col items-center justify-center gap-4">
-          <div className="text-destructive font-black text-lg">Infrastructure Error</div>
-          <p className="text-muted-foreground text-sm max-w-md text-center">{(error as any).message}</p>
-          <Button onClick={() => window.location.reload()} className="rounded-full px-8">Retry Connection</Button>
+        <div className="max-w-7xl mx-auto px-4 py-40 flex flex-col items-center justify-center gap-6">
+          <div className="h-16 w-16 bg-destructive/10 rounded-full flex items-center justify-center">
+            <Info className="h-8 w-8 text-destructive" />
+          </div>
+          <div className="text-center space-y-2">
+            <h2 className="text-destructive font-black text-2xl tracking-tight">Infrastructure Error</h2>
+            <p className="text-muted-foreground text-sm max-w-md">{(error as any).message}</p>
+          </div>
+          <motion.div
+            animate={{ scale: [1, 1.05, 1] }}
+            transition={{ duration: 2, repeat: Infinity }}
+          >
+            <Button onClick={() => window.location.reload()} className="rounded-full px-10 h-12 font-bold shadow-xl shadow-primary/20">
+              Retry Connection
+            </Button>
+          </motion.div>
         </div>
       </AppLayout>
     );
@@ -59,10 +71,24 @@ export function HomePage() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="py-8 md:py-10 lg:py-12">
           {status?.demo_mode && (
-            <div className="mb-8 p-4 bg-primary/10 border border-primary/20 rounded-2xl flex items-center gap-4 text-primary text-sm font-bold animate-m3-slide">
-              <Info className="h-5 w-5 shrink-0" />
-              <span>Demo Mode Active: Running on mock data. Connect Cloudflare D1 for persistence.</span>
-            </div>
+            <motion.div 
+              initial={{ opacity: 0, y: -20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="mb-8 p-5 bg-primary/5 border border-primary/20 rounded-m3-xl flex flex-col sm:flex-row items-start sm:items-center gap-4 transition-all hover:bg-primary/10"
+            >
+              <div className="h-10 w-10 bg-primary/10 rounded-full flex items-center justify-center shrink-0">
+                <Sparkles className="h-5 w-5 text-primary" />
+              </div>
+              <div className="flex-1 space-y-1">
+                <p className="text-primary text-sm font-black uppercase tracking-wider">Demo Mode Active</p>
+                <p className="text-foreground/70 text-sm font-medium">Running on mock data. Setup Cloudflare D1 for real persistence.</p>
+              </div>
+              <Button asChild variant="outline" className="rounded-full border-primary/30 text-primary font-bold gap-2 hover:bg-primary hover:text-white transition-all">
+                <Link to="/docs">
+                  Setup Guide <ArrowRight className="h-4 w-4" />
+                </Link>
+              </Button>
+            </motion.div>
           )}
           <header className="space-y-6 mb-10">
             <div className="relative group">
