@@ -1,7 +1,7 @@
 import { ApiResponse } from "../../shared/types"
 /**
  * Standardized API Client for AeroMail
- * Enforces production D1 bindings and handles edge errors gracefully.
+ * Enforces production D1/KV bindings and handles edge errors gracefully.
  */
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const controller = new AbortController();
@@ -15,34 +15,32 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
       signal: controller.signal,
       ...init
     });
+    // Handle redirecting logic if redirected (uncommon for JSON fetch, but possible)
+    if (res.redirected) {
+      window.location.href = res.url;
+      // Return a dummy promise that never resolves as the page is unloading
+      return new Promise(() => {});
+    }
     const rawText = await res.text();
     let json: ApiResponse<T>;
     try {
       json = JSON.parse(rawText) as ApiResponse<T>;
     } catch (e) {
-      // Catch common Cloudflare Worker error pages/responses
-      const isConfigError = rawText.toLowerCase().includes('worker routes failed') || 
-                          rawText.includes('500 Internal Server Error') ||
-                          rawText.toLowerCase().includes('binding');
-      if (isConfigError) {
-        throw new Error("Production Configuration Error: The 'EMAIL_DB' D1 binding is missing from your wrangler.jsonc or was not properly initialized. Check the Docs view for setup commands.");
+      const text = rawText.toLowerCase();
+      if (text.includes('gmail_config_missing')) {
+        throw new Error("Configuration Error: GMAIL_CLIENT_ID or REDIRECT_URI is missing from worker secrets.");
       }
-      throw new Error(`Critical: Unexpected API response (Status: ${res.status}). Ensure your worker is running and bindings are configured.`);
+      if (text.includes('binding') || text.includes('500 internal server error')) {
+        throw new Error("Relational Storage Error: The 'EMAIL_DB' or 'TOKENS' binding is missing or failed.");
+      }
+      throw new Error(`Unexpected Response: ${res.status}. Check system status.`);
     }
     if (!res.ok || !json.success || json.data === undefined) {
-      const errMsg = json.error || `Request failed with status ${res.status}`;
-      // Specifically guide users on D1 requirements
-      if (errMsg.toLowerCase().includes('binding') || errMsg.toLowerCase().includes('d1')) {
-        throw new Error("Relational Storage Unavailable: This action requires a Cloudflare D1 database binding named 'EMAIL_DB'.");
-      }
-      throw new Error(errMsg);
+      throw new Error(json.error || `Request failed (${res.status})`);
     }
     return json.data;
   } catch (e: any) {
-    if (e.name === 'AbortError') {
-      throw new Error("Edge latency timeout: The request took longer than 15s to respond.");
-    }
-    // Re-throw for react-query to catch and handle via UI
+    if (e.name === 'AbortError') throw new Error("Request timeout (15s)");
     throw e;
   } finally {
     clearTimeout(timeoutId);
