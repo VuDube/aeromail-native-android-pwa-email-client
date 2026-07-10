@@ -28,17 +28,20 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
       json = JSON.parse(rawText) as ApiResponse<T>;
     } catch (e) {
       const text = rawText.toUpperCase();
-      // Handle known Cloudflare environment errors specifically
-      if (text.includes('D1_') || text.includes('DATABASE') || res.status === 500) {
-        throw new Error("AeroMail Database Error: The D1 database binding 'EMAIL_DB' is missing or uninitialized. Ensure you have run your migrations and bound the D1 database in wrangler.jsonc.");
+      // DIAGNOSTIC LAYER: Map raw CF errors to human-readable instructions
+      if (text.includes('D1_') || text.includes('DATABASE')) {
+        throw new Error("AeroMail Database Error: The 'EMAIL_DB' D1 binding is missing. Please refer to Step 1 of the Technical Documentation (/docs).");
       }
       if (text.includes('KV_') || text.includes('NAMESPACE')) {
-        throw new Error("AeroMail Tokens Error: The 'TOKENS' KV namespace is not bound to the worker. Please check your Cloudflare dashboard settings.");
+        throw new Error("AeroMail Storage Error: The 'TOKENS' KV namespace is missing. Please refer to Step 2 of the Technical Documentation (/docs).");
+      }
+      if (res.status === 500) {
+        throw new Error("AeroMail Edge Network Error: The server encountered a problem processing your request. Check Worker Logs for details.");
       }
       if (res.status === 404) {
-        throw new Error(`Endpoint not found: ${path}`);
+        throw new Error(`Endpoint not found: ${path}. Ensure the worker is deployed with current routes.`);
       }
-      throw new Error(`Server Error (${res.status}): Invalid response from AeroMail Edge Network.`);
+      throw new Error(`Invalid response from Edge Network (${res.status}).`);
     }
     if (!res.ok || !json.success) {
       const errorMessage = json.error || `Request failed (${res.status})`;
@@ -46,12 +49,10 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
     }
     return json.data!;
   } catch (e: any) {
-    if (e.name === 'AbortError') throw new Error("Request timed out. The edge function took too long to respond.");
-    if (e instanceof ApiRedirectError) throw e;
-    if (e.message.includes('fetch')) {
-      console.error("[NET ERROR]", e.message);
-      throw new Error("Network connection failed. Ensure the AeroMail Worker is deployed and reachable.");
+    if (e.name === 'AbortError') {
+      throw new Error("The request timed out. This often happens if the Edge Function is cold-starting or the Gmail API is unresponsive.");
     }
+    if (e instanceof ApiRedirectError) throw e;
     console.error("[API ERROR]", e.message);
     throw e;
   } finally {
