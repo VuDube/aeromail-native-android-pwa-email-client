@@ -130,6 +130,11 @@ function runSetupCommands() {
         "bun",
         "add",
         "postal-mime@^2.0.0"
+    ],
+    [
+        "bun",
+        "add",
+        "react-resizable-panels"
     ]
 ];
     const ALLOWED = new Set(['npm', 'yarn', 'pnpm', 'bun']);
