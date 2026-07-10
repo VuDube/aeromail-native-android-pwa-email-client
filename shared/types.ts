@@ -3,7 +3,7 @@ export interface ApiResponse<T = unknown> {
   data?: T;
   error?: string;
 }
-export type FolderType = 'inbox' | 'sent' | 'drafts' | 'trash' | 'starred';
+export type FolderType = 'inbox' | 'sent' | 'drafts' | 'trash' | 'starred' | 'spam' | 'archive';
 export interface User {
   id: string;
   name: string;
@@ -19,7 +19,7 @@ export interface EmailAttachment {
   filename: string;
   contentType: string;
   size: number;
-  url: string;
+  url?: string;
 }
 export interface Email {
   id: string;
@@ -34,7 +34,6 @@ export interface Email {
   isStarred: boolean;
   folder: FolderType;
   attachments?: EmailAttachment[];
-  indexKey?: string;
 }
 export interface EmailThread {
   id: string;
@@ -53,6 +52,14 @@ export interface DomainInfo {
   status: 'active' | 'pending' | 'deleted';
   isRoutingEnabled: boolean;
   localEnabled: boolean;
+}
+export interface DraftInfo {
+  id?: string;
+  threadId?: string;
+  subject: string;
+  body: string;
+  from: string;
+  to: string[];
 }
 export interface SimulateResponse {
   success: boolean;

@@ -56,12 +56,11 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
     if (c.env.TOKENS) await c.env.TOKENS.delete("gmail_refresh_token");
     return ok(c, { success: true });
   });
-  // --- DOMAIN DISCOVERY & MANAGEMENT ---
+  // --- DOMAIN MANAGEMENT ---
   app.get('/api/domains', async (c) => {
     const db = c.env.EMAIL_DB;
     if (!db) return ok(c, []);
     try {
-      // 1. Fetch live zones from Cloudflare API if token is present
       let apiZones: any[] = [];
       if (c.env.CF_API_TOKEN) {
         try {
@@ -70,17 +69,15 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
           console.error("CF API Error:", e);
         }
       }
-      // 2. Fetch local registration state
       const { results: localRegistrations } = await db.prepare(
         "SELECT domain_id FROM user_domains WHERE user_id = 'me'"
       ).all() as any;
       const localSet = new Set(localRegistrations?.map((r: any) => r.domain_id) || []);
-      // 3. Merge data
       const domains: DomainInfo[] = apiZones.map(z => ({
         id: z.id,
         name: z.name,
         status: z.status === 'active' ? 'active' : 'pending',
-        isRoutingEnabled: true, // Simplified for demo
+        isRoutingEnabled: true,
         localEnabled: localSet.has(z.id)
       }));
       return ok(c, domains);
@@ -108,42 +105,94 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
     }
   });
   // --- THREAD & EMAIL ENDPOINTS ---
-  app.get('/api/status', async (c) => {
-    return ok(c, {
-      gmail_ready: !!(c.env.GMAIL_CLIENT_ID && c.env.TOKENS),
-      cf_ready: !!c.env.CF_API_TOKEN,
-      db_ready: !!c.env.EMAIL_DB,
-      demo_mode: !c.env.EMAIL_DB
-    });
-  });
   app.get('/api/emails', async (c) => {
     const db = c.env.EMAIL_DB;
     const folder = c.req.query('folder') || 'inbox';
+    const searchQuery = c.req.query('q');
     if (!db) {
-      const mock = MOCK_EMAILS
-        .filter(e => folder === 'starred' ? e.isStarred : e.folder === folder)
-        .map(e => ({
-          id: e.threadId,
-          lastMessageAt: e.timestamp,
-          subject: e.subject,
-          snippet: e.snippet,
-          unreadCount: e.isRead ? 0 : 1,
-          isStarred: e.isStarred,
-          folder: e.folder as any,
-          participantNames: [e.from.name]
-        }));
-      return ok(c, mock);
+      let mock = MOCK_EMAILS.filter(e => folder === 'starred' ? e.isStarred : e.folder === folder);
+      if (searchQuery) {
+        const q = searchQuery.toLowerCase();
+        mock = mock.filter(e => e.subject.toLowerCase().includes(q) || e.body.toLowerCase().includes(q));
+      }
+      return ok(c, mock.map(e => ({
+        id: e.threadId,
+        lastMessageAt: e.timestamp,
+        subject: e.subject,
+        snippet: e.snippet,
+        unreadCount: e.isRead ? 0 : 1,
+        isStarred: e.isStarred,
+        folder: e.folder as any,
+        participantNames: [e.from.name]
+      })));
     }
-    const query = folder === 'starred' 
-      ? "SELECT t.*, (SELECT GROUP_CONCAT(from_name, ', ') FROM (SELECT DISTINCT from_name FROM emails WHERE thread_id = t.id)) as participantNames FROM threads t WHERE is_starred = 1 ORDER BY last_message_at DESC"
-      : "SELECT t.*, (SELECT GROUP_CONCAT(from_name, ', ') FROM (SELECT DISTINCT from_name FROM emails WHERE thread_id = t.id)) as participantNames FROM threads t WHERE folder = ? ORDER BY last_message_at DESC";
-    const { results } = await (folder === 'starred' ? db.prepare(query).all() : db.prepare(query).bind(folder).all());
+    let query: string;
+    let params: any[] = [];
+    if (searchQuery) {
+      query = `
+        SELECT t.*, (SELECT GROUP_CONCAT(from_name, ', ') FROM (SELECT DISTINCT from_name FROM emails WHERE thread_id = t.id)) as participantNames 
+        FROM threads t 
+        WHERE (subject LIKE ? OR snippet LIKE ?)
+        ORDER BY last_message_at DESC
+      `;
+      params = [`%${searchQuery}%`, `%${searchQuery}%`];
+    } else if (folder === 'starred') {
+      query = "SELECT t.*, (SELECT GROUP_CONCAT(from_name, ', ') FROM (SELECT DISTINCT from_name FROM emails WHERE thread_id = t.id)) as participantNames FROM threads t WHERE is_starred = 1 ORDER BY last_message_at DESC";
+    } else {
+      query = "SELECT t.*, (SELECT GROUP_CONCAT(from_name, ', ') FROM (SELECT DISTINCT from_name FROM emails WHERE thread_id = t.id)) as participantNames FROM threads t WHERE folder = ? ORDER BY last_message_at DESC";
+      params = [folder];
+    }
+    const { results } = await db.prepare(query).bind(...params).all();
     return ok(c, results.map((r: any) => ({
       ...r,
       participantNames: r.participantNames ? r.participantNames.split(', ') : [],
       isStarred: !!r.is_starred,
       unreadCount: r.unread_count || 0
     })));
+  });
+  app.post('/api/drafts', async (c) => {
+    const db = c.env.EMAIL_DB;
+    if (!db) return bad(c, "D1 required");
+    const { subject, body, from, to } = await c.req.json();
+    const id = crypto.randomUUID();
+    const ts = Date.now();
+    const tid = crypto.randomUUID().slice(0, 16);
+    try {
+      await db.batch([
+        db.prepare("INSERT INTO threads (id, subject, last_message_at, snippet, unread_count, folder) VALUES (?, ?, ?, ?, 0, 'drafts')")
+          .bind(tid, subject, ts, body.slice(0, 100)),
+        db.prepare("INSERT INTO emails (id, thread_id, from_name, from_email, to_json, subject, body, snippet, timestamp, folder, is_read) VALUES (?, ?, 'Me', ?, ?, ?, ?, ?, ?, 'drafts', 1)")
+          .bind(id, tid, from, JSON.stringify(to || []), subject, body, body.slice(0, 100), ts)
+      ]);
+      return ok(c, { id, threadId: tid });
+    } catch (e: any) {
+      console.error("[D1 DRAFT ERROR]", e);
+      return internalError(c, "Failed to save draft");
+    }
+  });
+  app.post('/api/emails/send', async (c) => {
+    const db = c.env.EMAIL_DB;
+    const { to, subject, body, fromEmail, threadId } = await c.req.json();
+    if (!db) return bad(c, "Demo Mode: Connect D1 to send");
+    const token = await getGmailAccessToken(c.env);
+    const id = crypto.randomUUID();
+    const ts = Date.now();
+    const tid = threadId || id;
+    try {
+      await db.batch([
+        db.prepare(`
+          INSERT INTO threads (id, subject, last_message_at, snippet, unread_count, folder) 
+          VALUES (?, ?, ?, ?, 0, 'sent')
+          ON CONFLICT(id) DO UPDATE SET folder = 'sent', last_message_at = excluded.last_message_at
+        `).bind(tid, subject, ts, body.slice(0, 100)),
+        db.prepare("INSERT INTO emails (id, thread_id, from_name, from_email, to_json, subject, body, snippet, timestamp, folder, is_read) VALUES (?, ?, 'Aero User', ?, ?, ?, ?, ?, ?, 'sent', 1)")
+          .bind(id, tid, fromEmail || "user@aeromail.dev", JSON.stringify([{ email: to }]), subject, body, body.slice(0, 100), ts)
+      ]);
+      return ok(c, { id, delivered: !!token });
+    } catch (e: any) {
+      console.error("[D1 SEND ERROR]", e);
+      return internalError(c, "Message persistence failed");
+    }
   });
   app.get('/api/threads/:id', async (c) => {
     const db = c.env.EMAIL_DB;
@@ -185,16 +234,13 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
     }
     return ok(c, { id });
   });
-  app.post('/api/emails/send', async (c) => {
-    const db = c.env.EMAIL_DB;
-    const { to, subject, body, fromEmail } = await c.req.json();
-    if (!db) return bad(c, "Demo Mode: Connect D1 to send");
-    const token = await getGmailAccessToken(c.env);
-    const id = crypto.randomUUID();
-    const ts = Date.now();
-    await db.prepare("INSERT INTO emails (id, thread_id, from_name, from_email, to_json, subject, body, snippet, timestamp, folder, is_read) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'sent', 1)")
-      .bind(id, id, "Aero User", fromEmail || "user@aeromail.dev", JSON.stringify([{ email: to }]), subject, body, body.slice(0, 100), ts).run();
-    return ok(c, { id, delivered: !!token });
+  app.get('/api/status', async (c) => {
+    return ok(c, {
+      gmail_ready: !!(c.env.GMAIL_CLIENT_ID && c.env.TOKENS),
+      cf_ready: !!c.env.CF_API_TOKEN,
+      db_ready: !!c.env.EMAIL_DB,
+      demo_mode: !c.env.EMAIL_DB
+    });
   });
   app.post('/api/simulate/inbound', async (c) => {
     const db = c.env.EMAIL_DB;

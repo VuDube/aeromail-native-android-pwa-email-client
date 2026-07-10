@@ -4,36 +4,28 @@ import { useParams, Link } from 'react-router-dom';
 import { api } from '@/lib/api-client';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { EmailThread } from '@shared/types';
-import { Plus, Search, Loader2, RefreshCw, Inbox as InboxIcon, Sparkles, Info, ArrowRight } from 'lucide-react';
+import { Plus, Search, Loader2, RefreshCw, Inbox as InboxIcon, Sparkles, Info, ArrowRight, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { useDensity } from '@/hooks/use-density';
 import { ThreadCard } from '@/components/email/ThreadCard';
+import { cn } from '@/lib/utils';
 export function HomePage() {
   const queryClient = useQueryClient();
   const { folder = 'inbox' } = useParams<{ folder: string }>();
   const [searchQuery, setSearchQuery] = useState('');
+  const [isSearchFocused, setIsSearchFocused] = useState(false);
   const { density } = useDensity();
   const { data: status } = useQuery({
     queryKey: ['status'],
     queryFn: () => api<any>('/api/status')
   });
   const { data: threads, isLoading, isFetching, error } = useQuery<EmailThread[]>({
-    queryKey: ['threads', folder],
-    queryFn: () => api<EmailThread[]>(`/api/emails?folder=${folder}`),
+    queryKey: ['threads', folder, searchQuery],
+    queryFn: () => api<EmailThread[]>(`/api/emails?folder=${folder}${searchQuery ? `&q=${encodeURIComponent(searchQuery)}` : ''}`),
   });
-  const filteredThreads = useMemo(() => {
-    if (!threads) return [];
-    if (!searchQuery.trim()) return threads;
-    const q = searchQuery.toLowerCase();
-    return threads.filter(t =>
-      t.subject.toLowerCase().includes(q) ||
-      t.participantNames.some(p => p.toLowerCase().includes(q)) ||
-      t.snippet.toLowerCase().includes(q)
-    );
-  }, [threads, searchQuery]);
   const toggleMutation = useMutation({
     mutationFn: ({ id, updates }: { id: string, updates: any }) =>
       api(`/api/threads/${id}`, { method: 'PATCH', body: JSON.stringify(updates) }),
@@ -54,14 +46,9 @@ export function HomePage() {
             <h2 className="text-destructive font-black text-2xl tracking-tight">Infrastructure Error</h2>
             <p className="text-muted-foreground text-sm max-w-md">{(error as any).message}</p>
           </div>
-          <motion.div
-            animate={{ scale: [1, 1.05, 1] }}
-            transition={{ duration: 2, repeat: Infinity }}
-          >
-            <Button onClick={() => window.location.reload()} className="rounded-full px-10 h-12 font-bold shadow-xl shadow-primary/20">
-              Retry Connection
-            </Button>
-          </motion.div>
+          <Button onClick={() => window.location.reload()} className="rounded-full px-10 h-12 font-bold shadow-xl shadow-primary/20">
+            Retry Connection
+          </Button>
         </div>
       </AppLayout>
     );
@@ -70,44 +57,55 @@ export function HomePage() {
     <AppLayout>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="py-8 md:py-10 lg:py-12">
-          {status?.demo_mode && (
-            <motion.div 
-              initial={{ opacity: 0, y: -20 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="mb-8 p-5 bg-primary/5 border border-primary/20 rounded-m3-xl flex flex-col sm:flex-row items-start sm:items-center gap-4 transition-all hover:bg-primary/10"
-            >
-              <div className="h-10 w-10 bg-primary/10 rounded-full flex items-center justify-center shrink-0">
-                <Sparkles className="h-5 w-5 text-primary" />
-              </div>
-              <div className="flex-1 space-y-1">
-                <p className="text-primary text-sm font-black uppercase tracking-wider">Demo Mode Active</p>
-                <p className="text-foreground/70 text-sm font-medium">Running on mock data. Setup Cloudflare D1 for real persistence.</p>
-              </div>
-              <Button asChild variant="outline" className="rounded-full border-primary/30 text-primary font-bold gap-2 hover:bg-primary hover:text-white transition-all">
-                <Link to="/docs">
-                  Setup Guide <ArrowRight className="h-4 w-4" />
-                </Link>
-              </Button>
-            </motion.div>
-          )}
-          <header className="space-y-6 mb-10">
-            <div className="relative group">
-              <Search className="absolute left-5 top-1/2 -translate-y-1/2 h-5 w-5 text-surface-on-variant opacity-40 group-focus-within:text-primary transition-all" />
-              <Input
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search your conversations..."
-                className="w-full h-14 pl-14 pr-6 rounded-2xl bg-surface-2 border-none focus-visible:ring-2 focus-visible:ring-primary/50 shadow-sm text-base font-bold transition-all"
-              />
-            </div>
-            <div className="flex items-center justify-between px-2">
-              <div className="flex items-center gap-4">
-                <h1 className="text-4xl font-black tracking-tighter capitalize">{folder}</h1>
+          <header className="space-y-10 mb-10">
+            <div className="flex items-center justify-between">
+              <h1 className="text-5xl font-black tracking-tighter capitalize">{folder}</h1>
+              <div className="flex items-center gap-2">
                 {isFetching && <Loader2 className="h-5 w-5 animate-spin text-primary opacity-50" />}
+                <Button variant="ghost" size="icon" onClick={handleRefresh} className="rounded-full hover:bg-surface-2">
+                  <RefreshCw className="h-5 w-5" />
+                </Button>
               </div>
-              <Button variant="ghost" size="icon" onClick={handleRefresh} className="rounded-full bg-surface-1 hover:bg-surface-2 transition-colors">
-                <RefreshCw className="h-5 w-5" />
-              </Button>
+            </div>
+            <div className="relative group max-w-3xl mx-auto w-full">
+              <motion.div
+                animate={{ 
+                  scale: isSearchFocused ? 1.02 : 1,
+                  y: isSearchFocused ? -4 : 0,
+                  boxShadow: isSearchFocused ? '0 20px 40px rgba(0,0,0,0.1)' : '0 4px 6px rgba(0,0,0,0.02)'
+                }}
+                transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+                className={cn(
+                  "relative flex items-center bg-surface-2 rounded-2xl transition-all border-2 border-transparent",
+                  isSearchFocused && "bg-background border-primary/20"
+                )}
+              >
+                <Search className={cn(
+                  "absolute left-5 h-5 w-5 transition-colors",
+                  isSearchFocused ? "text-primary" : "text-surface-on-variant opacity-40"
+                )} />
+                <Input
+                  value={searchQuery}
+                  onFocus={() => setIsSearchFocused(true)}
+                  onBlur={() => setIsSearchFocused(false)}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search in mail..."
+                  className="w-full h-14 pl-14 pr-12 rounded-2xl bg-transparent border-none focus-visible:ring-0 text-base font-bold"
+                />
+                <AnimatePresence>
+                  {searchQuery && (
+                    <motion.button
+                      initial={{ opacity: 0, scale: 0.8 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.8 }}
+                      onClick={() => setSearchQuery('')}
+                      className="absolute right-4 h-8 w-8 rounded-full flex items-center justify-center hover:bg-surface-variant/20"
+                    >
+                      <X className="h-4 w-4" />
+                    </motion.button>
+                  )}
+                </AnimatePresence>
+              </motion.div>
             </div>
           </header>
           <section className="space-y-px pb-32">
@@ -116,9 +114,9 @@ export function HomePage() {
                 <Loader2 className="h-10 w-10 animate-spin text-primary/40" />
                 <p className="text-[10px] font-black uppercase tracking-[0.3em] opacity-40">Syncing Conversations...</p>
               </div>
-            ) : filteredThreads.length > 0 ? (
+            ) : threads && threads.length > 0 ? (
               <AnimatePresence mode="popLayout">
-                {filteredThreads.map((thread, idx) => (
+                {threads.map((thread, idx) => (
                   <ThreadCard
                     key={thread.id}
                     thread={thread}
@@ -146,8 +144,13 @@ export function HomePage() {
                   <Sparkles className="absolute -top-2 -right-2 h-6 w-6 text-primary animate-pulse" />
                 </div>
                 <div className="space-y-2 px-8">
-                  <h3 className="text-2xl font-black">Everything caught up</h3>
-                  <p className="text-surface-on-variant text-sm max-w-xs mx-auto">No messages found in {folder}. Enjoy the clear space!</p>
+                  <h3 className="text-2xl font-black">No messages found</h3>
+                  <p className="text-surface-on-variant text-sm max-w-xs mx-auto">Try a different search query or check another folder.</p>
+                  {searchQuery && (
+                    <Button variant="link" onClick={() => setSearchQuery('')} className="text-primary font-bold">
+                      Clear Search
+                    </Button>
+                  )}
                 </div>
               </div>
             )}
