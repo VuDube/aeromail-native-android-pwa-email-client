@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
 import { MessageItem } from '@/components/email/MessageItem';
+import { cn } from '@/lib/utils';
 interface ThreadPageProps {
   embeddedId?: string;
   onBack?: () => void;
@@ -104,39 +105,43 @@ export function ThreadPage({ embeddedId, onBack }: ThreadPageProps) {
     onError: (err: any) => toast.error(err.message || "Failed to send")
   });
   const content = (
-    <div className="max-w-4xl mx-auto w-full px-4 lg:px-8 pb-64">
-      <header className="sticky top-0 bg-background/80 backdrop-blur-xl z-[20] py-4 flex items-center justify-between border-b border-surface-variant/10 mb-8">
-        <div className="flex items-center gap-2 min-w-0">
-          {(onBack || !embeddedId) && (
-            <Button variant="ghost" size="icon" onClick={() => (onBack ? onBack() : navigate(-1))} className="rounded-full shrink-0">
-              <ArrowLeft className="h-5 w-5" />
-            </Button>
-          )}
-          <h1 className="text-xl lg:text-2xl font-black tracking-tight truncate">{thread?.subject}</h1>
+    <div className="w-full h-full flex flex-col">
+      <div className="flex-1 overflow-y-auto custom-scrollbar">
+        <div className="max-w-4xl mx-auto w-full px-4 lg:px-8 pb-32">
+          <header className="sticky top-0 bg-background/80 backdrop-blur-xl z-[20] py-4 flex items-center justify-between border-b border-surface-variant/10 mb-8">
+            <div className="flex items-center gap-2 min-w-0">
+              {(onBack || !embeddedId) && (
+                <Button variant="ghost" size="icon" onClick={() => (onBack ? onBack() : navigate(-1))} className="rounded-full shrink-0">
+                  <ArrowLeft className="h-5 w-5" />
+                </Button>
+              )}
+              <h1 className="text-xl lg:text-2xl font-black tracking-tight truncate">{thread?.subject}</h1>
+            </div>
+            <div className="flex items-center gap-1 shrink-0">
+              <Button variant="ghost" size="icon" onClick={() => toggleMutation.mutate({ isStarred: !thread?.isStarred })} className="rounded-full">
+                <Star className={cn("h-5 w-5", thread?.isStarred && "fill-yellow-500 text-yellow-500")} />
+              </Button>
+              <Button variant="ghost" size="icon" onClick={() => { toggleMutation.mutate({ folder: 'trash' }); onBack?.(); navigate(-1); }} className="rounded-full">
+                <Trash2 className="h-5 w-5 text-destructive" />
+              </Button>
+            </div>
+          </header>
+          <div className="space-y-6">
+            {messages.map((msg, idx) => (
+              <MessageItem
+                key={msg.id}
+                msg={msg}
+                isLatest={idx === messages.length - 1}
+                isSameSenderAsPrev={idx > 0 && messages[idx-1].from.email === msg.from.email}
+              />
+            ))}
+            <div ref={messagesEndRef} className="h-px w-full" />
+          </div>
         </div>
-        <div className="flex items-center gap-1 shrink-0">
-          <Button variant="ghost" size="icon" onClick={() => toggleMutation.mutate({ isStarred: !thread?.isStarred })} className="rounded-full">
-            <Star className={cn("h-5 w-5", thread?.isStarred && "fill-yellow-500 text-yellow-500")} />
-          </Button>
-          <Button variant="ghost" size="icon" onClick={() => { toggleMutation.mutate({ folder: 'trash' }); onBack?.(); navigate(-1); }} className="rounded-full">
-            <Trash2 className="h-5 w-5 text-destructive" />
-          </Button>
-        </div>
-      </header>
-      <div className="space-y-6">
-        {messages.map((msg, idx) => (
-          <MessageItem
-            key={msg.id}
-            msg={msg}
-            isLatest={idx === messages.length - 1}
-            isSameSenderAsPrev={idx > 0 && messages[idx-1].from.email === msg.from.email}
-          />
-        ))}
-        <div ref={messagesEndRef} className="h-px w-full" />
       </div>
       <div className={cn(
-        "fixed bottom-0 right-0 p-6 z-[40] bg-gradient-to-t from-background via-background/95 to-transparent pt-20",
-        embeddedId ? "left-auto lg:w-[65%]" : "left-0 lg:left-72"
+        "shrink-0 p-6 bg-gradient-to-t from-background via-background/95 to-transparent pt-10 border-t border-surface-variant/5",
+        embeddedId ? "w-full" : "w-full"
       )}>
         <div className="max-w-4xl mx-auto w-full">
           <AnimatePresence mode="wait">
@@ -184,16 +189,18 @@ export function ThreadPage({ embeddedId, onBack }: ThreadPageProps) {
   if (embeddedId) return content;
   return (
     <AppLayout>
-      <div className="py-8 md:py-10 lg:py-12">
-        {isLoading ? (
-          <div className="flex h-64 items-center justify-center"><Loader2 className="animate-spin text-primary/20 h-10 w-10" /></div>
-        ) : error || !thread ? (
-          <div className="max-w-md mx-auto py-20 text-center space-y-6">
-             <div className="h-16 w-16 bg-muted rounded-full flex items-center justify-center text-muted-foreground mx-auto"><ArrowLeft className="h-8 w-8" /></div>
-             <h2 className="text-2xl font-black">Message not found</h2>
-             <Button onClick={() => navigate('/')} className="rounded-full">Back to Inbox</Button>
-          </div>
-        ) : content}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="py-8 md:py-10 lg:py-12 min-h-screen flex flex-col">
+          {isLoading ? (
+            <div className="flex flex-1 items-center justify-center"><Loader2 className="animate-spin text-primary/20 h-10 w-10" /></div>
+          ) : error || !thread ? (
+            <div className="max-w-md mx-auto py-20 text-center space-y-6">
+               <div className="h-16 w-16 bg-muted rounded-full flex items-center justify-center text-muted-foreground mx-auto"><ArrowLeft className="h-8 w-8" /></div>
+               <h2 className="text-2xl font-black">Message not found</h2>
+               <Button onClick={() => navigate('/')} className="rounded-full">Back to Inbox</Button>
+            </div>
+          ) : content}
+        </div>
       </div>
     </AppLayout>
   );

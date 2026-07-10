@@ -1,10 +1,10 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useParams, Link } from 'react-router-dom';
 import { api } from '@/lib/api-client';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { EmailThread } from '@shared/types';
-import { Plus, Search, Loader2, RefreshCw, Inbox as InboxIcon, Sparkles, Info, X, Database } from 'lucide-react';
+import { Plus, Search, Loader2, RefreshCw, Inbox as InboxIcon, Sparkles, X, Database } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -38,8 +38,8 @@ export function HomePage() {
     toast.success("Inbox refreshed");
   }, [queryClient]);
   const emailListContent = (
-    <div className="h-full flex flex-col">
-      <header className="p-4 lg:p-8 space-y-6 shrink-0 bg-background/80 backdrop-blur-md sticky top-0 z-20">
+    <div className="h-full flex flex-col bg-background">
+      <header className="p-4 lg:p-6 space-y-4 shrink-0 bg-background/80 backdrop-blur-md sticky top-0 z-20">
         <div className="flex items-center justify-between">
           <h1 className="text-3xl lg:text-4xl font-black tracking-tighter capitalize">{folder}</h1>
           <div className="flex items-center gap-3">
@@ -129,41 +129,47 @@ export function HomePage() {
   }
   return (
     <AppLayout>
-      {isMobile ? (
-        emailListContent
-      ) : (
-        <ResizablePanelGroup direction="horizontal" className="h-full">
-          <ResizablePanel defaultSize={35} minSize={25} maxSize={50}>
-            {emailListContent}
-          </ResizablePanel>
-          <ResizableHandle className="w-1 bg-surface-variant/5 hover:bg-primary/20 transition-colors" />
-          <ResizablePanel defaultSize={65}>
-            <div className="h-full bg-surface-1/30">
-              <AnimatePresence mode="wait">
-                {selectedThreadId ? (
-                  <motion.div
-                    key={selectedThreadId}
-                    initial={{ opacity: 0, x: 20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: -20 }}
-                    className="h-full"
-                  >
-                    <ThreadPage embeddedId={selectedThreadId} onBack={() => setSelectedThreadId(null)} />
-                  </motion.div>
-                ) : (
-                  <div className="h-full flex flex-col items-center justify-center text-center p-12 space-y-4">
-                    <div className="h-24 w-24 bg-surface-2 rounded-full flex items-center justify-center">
-                      <Sparkles className="h-10 w-10 text-primary/20" />
-                    </div>
-                    <h3 className="text-2xl font-black tracking-tight">Select a conversation</h3>
-                    <p className="text-muted-foreground text-sm max-w-xs">Pick an email from the list to view its contents and reply.</p>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-full">
+        <div className="py-8 md:py-10 lg:py-12 h-full flex flex-col">
+          <div className="flex-1 rounded-m3-xl border border-surface-variant/10 overflow-hidden shadow-2xl bg-surface-1">
+            {isMobile ? (
+              emailListContent
+            ) : (
+              <ResizablePanelGroup direction="horizontal" className="h-full">
+                <ResizablePanel defaultSize={35} minSize={25} maxSize={50}>
+                  {emailListContent}
+                </ResizablePanel>
+                <ResizableHandle className="w-1 bg-surface-variant/5 hover:bg-primary/20 transition-colors" />
+                <ResizablePanel defaultSize={65}>
+                  <div className="h-full bg-surface-1/30">
+                    <AnimatePresence mode="wait">
+                      {selectedThreadId ? (
+                        <motion.div
+                          key={selectedThreadId}
+                          initial={{ opacity: 0, x: 20 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          exit={{ opacity: 0, x: -20 }}
+                          className="h-full"
+                        >
+                          <ThreadPage embeddedId={selectedThreadId} onBack={() => setSelectedThreadId(null)} />
+                        </motion.div>
+                      ) : (
+                        <div className="h-full flex flex-col items-center justify-center text-center p-12 space-y-4">
+                          <div className="h-24 w-24 bg-surface-2 rounded-full flex items-center justify-center">
+                            <Sparkles className="h-10 w-10 text-primary/20" />
+                          </div>
+                          <h3 className="text-2xl font-black tracking-tight">Select a conversation</h3>
+                          <p className="text-muted-foreground text-sm max-w-xs">Pick an email from the list to view its contents and reply.</p>
+                        </div>
+                      )}
+                    </AnimatePresence>
                   </div>
-                )}
-              </AnimatePresence>
-            </div>
-          </ResizablePanel>
-        </ResizablePanelGroup>
-      )}
+                </ResizablePanel>
+              </ResizablePanelGroup>
+            )}
+          </div>
+        </div>
+      </div>
       <Link to="/compose">
         <motion.button
           whileHover={{ scale: 1.05 }}

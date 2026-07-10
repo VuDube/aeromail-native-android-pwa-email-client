@@ -11,18 +11,18 @@ import { Switch } from '@/components/ui/switch';
 import { Button } from '@/components/ui/button';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { Badge } from '@/components/ui/badge';
-import { ShieldCheck, Loader2, Globe, Bug, Terminal, Zap, AlertTriangle } from 'lucide-react';
+import { ShieldCheck, Loader2, Globe, Bug, Terminal, Zap, AlertTriangle, Database } from 'lucide-react';
 import { toast } from 'sonner';
 export function SettingsPage() {
   const { isDark, toggleTheme } = useTheme();
   const { density, setDensity } = useDensity();
   const queryClient = useQueryClient();
-  const { data: status, isLoading: isStatusLoading } = useQuery({ 
-    queryKey: ['status'], 
-    queryFn: () => api<any>('/api/status') 
+  const { data: status, isLoading: isStatusLoading } = useQuery({
+    queryKey: ['status'],
+    queryFn: () => api<any>('/api/status')
   });
-  const { data: domains, isLoading: isDomainsLoading } = useQuery({ 
-    queryKey: ['domains'], 
+  const { data: domains, isLoading: isDomainsLoading } = useQuery({
+    queryKey: ['domains'],
     queryFn: () => api<DomainInfo[]>('/api/domains'),
     enabled: !!status?.db_ready
   });
@@ -56,13 +56,13 @@ export function SettingsPage() {
           </header>
           <div className="grid gap-8 max-w-4xl pb-40">
             {status && !status.db_ready && (
-              <Card className="border-destructive/30 bg-destructive/5 rounded-m3-xl">
+              <Card className="border-destructive/30 bg-destructive/5 rounded-m3-xl shadow-none">
                 <CardContent className="pt-6 flex gap-4 items-start">
                   <AlertTriangle className="h-6 w-6 text-destructive shrink-0 mt-0.5" />
                   <div className="space-y-1">
                     <p className="font-black text-destructive tracking-tight">Database Binding Missing</p>
                     <p className="text-sm text-destructive/80 font-medium leading-relaxed">
-                      Your Cloudflare Worker is not bound to a D1 Database named <code className="bg-destructive/10 px-1 rounded font-bold">EMAIL_DB</code>. 
+                      Your Cloudflare Worker is not bound to a D1 Database named <code className="bg-destructive/10 px-1 rounded font-bold">EMAIL_DB</code>.
                       Persistence and multi-domain features are currently disabled.
                     </p>
                   </div>
@@ -73,15 +73,15 @@ export function SettingsPage() {
               <div className="flex items-center gap-2 text-primary font-black uppercase tracking-widest text-xs">
                 <Bug className="h-4 w-4" /> Infrastructure Tools
               </div>
-              <Card className="rounded-m3-xl bg-primary/5 border border-primary/10">
+              <Card className="rounded-m3-xl bg-primary/5 border border-primary/10 shadow-none">
                 <CardHeader>
                   <CardTitle className="text-lg flex items-center gap-2"><Terminal className="h-5 w-5" /> Inbound Simulation</CardTitle>
                   <CardDescription>Triggers a synthetic inbound email event to test D1 persistence.</CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <Button 
-                    onClick={() => simulateMutation.mutate()} 
-                    disabled={simulateMutation.isPending || !status?.db_ready} 
+                  <Button
+                    onClick={() => simulateMutation.mutate()}
+                    disabled={simulateMutation.isPending || !status?.db_ready}
                     className="w-full rounded-full bg-primary font-bold h-12 shadow-lg shadow-primary/20 gap-2"
                   >
                     {simulateMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />} Inject Test Email
@@ -93,7 +93,7 @@ export function SettingsPage() {
               <div className="flex items-center gap-2 text-primary font-black uppercase tracking-widest text-xs">
                 <ShieldCheck className="h-4 w-4" /> Domain Identities
               </div>
-              <Card className="rounded-m3-xl bg-surface-1">
+              <Card className="rounded-m3-xl bg-surface-1 border border-surface-variant/10 shadow-none">
                 <CardHeader>
                   <CardTitle className="text-lg">Available Domains</CardTitle>
                   <CardDescription>Managed via Cloudflare Email Routing and D1 persistence.</CardDescription>
@@ -132,7 +132,7 @@ export function SettingsPage() {
             </section>
             <section className="space-y-4">
               <div className="flex items-center gap-2 text-primary font-black uppercase tracking-widest text-xs">Appearance</div>
-              <Card className="rounded-m3-xl bg-surface-1">
+              <Card className="rounded-m3-xl bg-surface-1 border border-surface-variant/10 shadow-none">
                 <CardContent className="p-0 divide-y divide-surface-variant/10">
                   <div className="flex items-center justify-between p-6">
                     <Label className="font-bold cursor-pointer" htmlFor="dark-mode">Dark Mode</Label>
@@ -154,4 +154,3 @@ export function SettingsPage() {
     </AppLayout>
   );
 }
-import { Database } from 'lucide-react';
