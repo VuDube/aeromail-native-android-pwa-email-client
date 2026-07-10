@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { ok, bad, internalError, notFound, Env, getGmailAccessToken, encrypt, fetchCloudflare } from './core-utils';
-import { DomainInfo } from "../shared/types";
+import { DomainInfo, EmailThread, Email } from "../shared/types";
 export function userRoutes(app: Hono<{ Bindings: Env }>) {
   app.get('/api/auth/status', async (c) => {
     if (!c.env.TOKENS) return internalError(c, "TOKENS_BINDING_MISSING");
@@ -10,11 +10,7 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
   app.get('/api/auth/login', async (c) => {
     const { GMAIL_CLIENT_ID, REDIRECT_URI } = c.env;
     if (!GMAIL_CLIENT_ID || !REDIRECT_URI) return bad(c, "AUTH_SECRETS_MISSING");
-    const scopes = [
-      'https://www.googleapis.com/auth/gmail.send',
-      'https://www.googleapis.com/auth/userinfo.email',
-      'openid'
-    ].join(' ');
+    const scopes = ['https://www.googleapis.com/auth/gmail.send', 'https://www.googleapis.com/auth/userinfo.email', 'openid'].join(' ');
     const params = new URLSearchParams({
       client_id: GMAIL_CLIENT_ID,
       redirect_uri: REDIRECT_URI,
@@ -42,38 +38,23 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
         }),
       });
       const tokens = await tokenRes.json() as any;
-      if (tokens.error) {
-        console.error("[AUTH FAIL]", tokens.error_description || tokens.error);
-        return bad(c, `OAuth Exchange Failed: ${tokens.error_description || tokens.error}`);
-      }
-      if (tokens.refresh_token) {
-        if (!ENCRYPTION_SECRET) return internalError(c, "ENCRYPTION_SECRET_NOT_SET");
+      if (tokens.error) return bad(c, `OAuth Exchange Failed: ${tokens.error_description || tokens.error}`);
+      if (tokens.refresh_token && ENCRYPTION_SECRET) {
         const encrypted = await encrypt(tokens.refresh_token, ENCRYPTION_SECRET);
         await TOKENS!.put("gmail_refresh_token", encrypted);
       }
       return c.redirect('/settings?auth=success');
     } catch (e: any) {
-      console.error("[AUTH CRASH]", e.message);
       return internalError(c, e.message);
     }
   });
-  app.post('/api/auth/disconnect', async (c) => {
-    if (c.env.TOKENS) await c.env.TOKENS.delete("gmail_refresh_token");
-    return ok(c, { success: true });
-  });
   app.get('/api/domains', async (c) => {
     const db = c.env.EMAIL_DB;
-    if (!db) return internalError(c, "DATABASE_BINDING_MISSING: Check Step 1 of Docs.");
+    if (!db) return internalError(c, "DATABASE_BINDING_MISSING");
     try {
       let apiZones: any[] = [];
       if (c.env.CF_API_TOKEN) {
-        try {
-          apiZones = await fetchCloudflare<any[]>(c.env, "/zones");
-        } catch (e) {
-          console.error("Cloudflare Discovery Error:", e);
-        }
-      } else {
-         console.warn("CF_API_TOKEN not set, skipping remote domain discovery");
+        apiZones = await fetchCloudflare<any[]>(c.env, "/zones");
       }
       const { results: localRegistrations } = await db.prepare("SELECT domain_id FROM user_domains WHERE user_id = 'me'").all() as any;
       const localSet = new Set(localRegistrations?.map((r: any) => r.domain_id) || []);
@@ -131,6 +112,75 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
       unreadCount: r.unread_count || 0
     })));
   });
+  app.get('/api/threads/:id', async (c) => {
+    const db = c.env.EMAIL_DB;
+    const id = c.req.param('id');
+    if (!db) return internalError(c, "DATABASE_BINDING_MISSING");
+    try {
+      const thread = await db.prepare("SELECT * FROM threads WHERE id = ?").bind(id).first() as any;
+      if (!thread) return notFound(c, "Thread not found");
+      const { results: emails } = await db.prepare("SELECT * FROM emails WHERE thread_id = ? ORDER BY timestamp ASC").bind(id).all();
+      const formattedEmails = emails.map((e: any) => ({
+        ...e,
+        from: { name: e.from_name, email: e.from_email },
+        to: JSON.parse(e.to_json),
+        isRead: !!e.is_read,
+        isStarred: !!e.is_starred
+      }));
+      return ok(c, { thread: { ...thread, isStarred: !!thread.is_starred, messages: formattedEmails } });
+    } catch (e: any) {
+      return internalError(c, e.message);
+    }
+  });
+  app.patch('/api/threads/:id', async (c) => {
+    const db = c.env.EMAIL_DB;
+    const id = c.req.param('id');
+    const updates = await c.req.json();
+    if (!db) return internalError(c, "DATABASE_BINDING_MISSING");
+    try {
+      const sets: string[] = [];
+      const params: any[] = [];
+      if (updates.isRead !== undefined) {
+        sets.push("unread_count = ?");
+        params.push(updates.isRead ? 0 : 1);
+        await db.prepare("UPDATE emails SET is_read = ? WHERE thread_id = ?").bind(updates.isRead ? 1 : 0, id).run();
+      }
+      if (updates.isStarred !== undefined) {
+        sets.push("is_starred = ?");
+        params.push(updates.isStarred ? 1 : 0);
+        await db.prepare("UPDATE emails SET is_starred = ? WHERE thread_id = ?").bind(updates.isStarred ? 1 : 0, id).run();
+      }
+      if (updates.folder !== undefined) {
+        sets.push("folder = ?");
+        params.push(updates.folder);
+        await db.prepare("UPDATE emails SET folder = ? WHERE thread_id = ?").bind(updates.folder, id).run();
+      }
+      if (sets.length > 0) {
+        params.push(id);
+        await db.prepare(`UPDATE threads SET ${sets.join(", ")} WHERE id = ?`).bind(...params).run();
+      }
+      return ok(c, { id, updated: true });
+    } catch (e: any) {
+      return internalError(c, e.message);
+    }
+  });
+  app.post('/api/drafts', async (c) => {
+    const db = c.env.EMAIL_DB;
+    if (!db) return internalError(c, "DATABASE_BINDING_MISSING");
+    const { subject, body, from, to, threadId } = await c.req.json();
+    const id = crypto.randomUUID();
+    const ts = Date.now();
+    const tid = threadId || crypto.randomUUID();
+    try {
+      await db.batch([
+        db.prepare("INSERT INTO threads (id, subject, last_message_at, snippet, unread_count, folder) VALUES (?, ?, ?, ?, 0, 'drafts') ON CONFLICT(id) DO UPDATE SET folder = 'drafts', last_message_at = excluded.last_message_at").bind(tid, subject, ts, body.slice(0, 100)),
+        db.prepare("INSERT INTO emails (id, thread_id, from_name, from_email, to_json, subject, body, snippet, timestamp, folder, is_read) VALUES (?, ?, 'Aero User', ?, ?, ?, ?, ?, ?, 'drafts', 1)").bind(id, tid, from, JSON.stringify((to || []).map((email: string) => ({ email }))), subject, body, body.slice(0, 100), ts)
+      ]);
+      return ok(c, { id, threadId: tid });
+    } catch (e: any) {
+      return internalError(c, e.message);
+    }
+  });
   app.post('/api/emails/send', async (c) => {
     const db = c.env.EMAIL_DB;
     if (!db) return internalError(c, "DATABASE_BINDING_MISSING");
@@ -158,9 +208,7 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
       try {
         const check = await db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='emails'").first();
         tablesOk = !!check;
-      } catch {
-        tablesOk = false;
-      }
+      } catch { tablesOk = false; }
     }
     return ok(c, {
       gmail_ready: !!(c.env.GMAIL_CLIENT_ID && c.env.TOKENS && c.env.ENCRYPTION_SECRET),

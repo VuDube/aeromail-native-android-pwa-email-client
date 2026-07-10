@@ -29,10 +29,7 @@ export function ComposePage() {
   const [recipients, setRecipients] = useState<string[]>([]);
   const [showDiscardDialog, setShowDiscardDialog] = useState(false);
   const undoTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const { data: domains } = useQuery({
-    queryKey: ['domains'],
-    queryFn: () => api<DomainInfo[]>('/api/domains')
-  });
+  const { data: domains } = useQuery({ queryKey: ['domains'], queryFn: () => api<DomainInfo[]>('/api/domains') });
   const enabledDomains = useMemo(() => domains?.filter(d => d.localEnabled) || [], [domains]);
   const { register, handleSubmit, setValue, watch, formState: { isDirty } } = useForm({
     resolver: zodResolver(composeSchema),
@@ -50,10 +47,7 @@ export function ComposePage() {
     return () => { if (undoTimerRef.current) clearTimeout(undoTimerRef.current); };
   }, []);
   const sendEmailMutation = useMutation({
-    mutationFn: (data: any) => api('/api/emails/send', {
-      method: 'POST',
-      body: JSON.stringify({ ...data, to: recipients })
-    }),
+    mutationFn: (data: any) => api('/api/emails/send', { method: 'POST', body: JSON.stringify({ ...data, to: recipients }) }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['threads'] });
       navigate('/');
@@ -61,12 +55,9 @@ export function ComposePage() {
     onError: (err: any) => toast.error(err.message || "Sending failed")
   });
   const saveDraftMutation = useMutation({
-    mutationFn: (data: any) => api('/api/drafts', {
-      method: 'POST',
-      body: JSON.stringify({ ...data, to: recipients })
-    }),
+    mutationFn: (data: any) => api('/api/drafts', { method: 'POST', body: JSON.stringify({ ...data, to: recipients }) }),
     onSuccess: () => {
-      toast.success('Draft saved');
+      toast.success('Draft saved successfully');
       queryClient.invalidateQueries({ queryKey: ['threads', 'drafts'] });
     }
   });
@@ -78,19 +69,14 @@ export function ComposePage() {
           <div className="h-2 w-2 bg-primary rounded-full animate-pulse" />
           <span className="text-sm font-bold">Sending...</span>
         </div>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => {
-            if (undoTimerRef.current) {
-              clearTimeout(undoTimerRef.current);
-              undoTimerRef.current = null;
-              toast.dismiss(toastId);
-              toast.info('Sending cancelled');
-            }
-          }}
-          className="text-primary hover:bg-primary/10 font-black gap-2"
-        >
+        <Button variant="ghost" size="sm" onClick={() => {
+          if (undoTimerRef.current) {
+            clearTimeout(undoTimerRef.current);
+            undoTimerRef.current = null;
+            toast.dismiss(toastId);
+            toast.info('Sending cancelled');
+          }
+        }} className="text-primary hover:bg-primary/10 font-black gap-2">
           <Undo className="h-4 w-4" /> UNDO
         </Button>
       </div>
@@ -110,10 +96,7 @@ export function ComposePage() {
     <AppLayout>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="py-8 md:py-10 lg:py-12">
-          <motion.div
-            layoutId="compose-fab"
-            className="bg-surface-1 rounded-m3-xl shadow-2xl border border-surface-variant/20 flex flex-col overflow-hidden min-h-[75vh] relative"
-          >
+          <motion.div layoutId="compose-fab" className="bg-surface-1 rounded-m3-xl shadow-2xl border border-surface-variant/20 flex flex-col overflow-hidden min-h-[75vh] relative">
             {(saveDraftMutation.isPending || sendEmailMutation.isPending) && (
               <div className="absolute inset-0 bg-background/60 backdrop-blur-[2px] z-[50] flex items-center justify-center">
                 <Loader2 className="h-10 w-10 animate-spin text-primary" />
@@ -127,19 +110,10 @@ export function ComposePage() {
                 <h2 className="text-xl font-black tracking-tight">Compose</h2>
               </div>
               <div className="flex items-center gap-2">
-                <Button
-                  variant="ghost"
-                  onClick={() => saveDraftMutation.mutate({ subject: currentSubject, body: currentBody, from: selectedFrom })}
-                  disabled={saveDraftMutation.isPending || sendEmailMutation.isPending}
-                  className="rounded-full font-bold h-11"
-                >
+                <Button variant="ghost" onClick={() => saveDraftMutation.mutate({ subject: currentSubject, body: currentBody, from: selectedFrom })} disabled={saveDraftMutation.isPending || sendEmailMutation.isPending} className="rounded-full font-bold h-11">
                   <Save className="h-4 w-4 mr-2" /> Save
                 </Button>
-                <Button
-                  onClick={handleSubmit(onSubmit)}
-                  disabled={sendEmailMutation.isPending || saveDraftMutation.isPending}
-                  className="rounded-full bg-primary px-10 h-11 font-bold shadow-lg shadow-primary/20 gap-2"
-                >
+                <Button onClick={handleSubmit(onSubmit)} disabled={sendEmailMutation.isPending || saveDraftMutation.isPending} className="rounded-full bg-primary px-10 h-11 font-bold shadow-lg shadow-primary/20 gap-2">
                   <Send className="h-4 w-4" /> Send
                 </Button>
               </div>
@@ -153,9 +127,7 @@ export function ComposePage() {
                   </SelectTrigger>
                   <SelectContent className="rounded-m3-lg">
                     <SelectItem value="user@aeromail.dev" className="font-bold">user@aeromail.dev</SelectItem>
-                    {enabledDomains.map(d => (
-                      <SelectItem key={d.id} value={`hello@${d.name}`} className="font-bold">hello@{d.name}</SelectItem>
-                    ))}
+                    {enabledDomains.map(d => <SelectItem key={d.id} value={`hello@${d.name}`} className="font-bold">hello@{d.name}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
@@ -163,24 +135,12 @@ export function ComposePage() {
                 <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest w-10">To</span>
                 <AnimatePresence>
                   {recipients.map(r => (
-                    <motion.span
-                      key={r}
-                      initial={{ scale: 0.8, opacity: 0 }}
-                      animate={{ scale: 1, opacity: 1 }}
-                      exit={{ scale: 0.8, opacity: 0 }}
-                      className="inline-flex items-center gap-2 bg-primary/10 text-primary px-3 py-1.5 rounded-full text-xs font-bold transition-all hover:bg-primary/20"
-                    >
+                    <motion.span key={r} initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.8, opacity: 0 }} className="inline-flex items-center gap-2 bg-primary/10 text-primary px-3 py-1.5 rounded-full text-xs font-bold transition-all hover:bg-primary/20">
                       {r} <button type="button" onClick={() => setRecipients(recipients.filter(x => x !== r))}><X className="h-3 w-3" /></button>
                     </motion.span>
                   ))}
                 </AnimatePresence>
-                <Input
-                  value={recipientInput}
-                  onChange={(e) => setRecipientInput(e.target.value)}
-                  onKeyDown={(e) => (e.key === 'Enter' || e.key === ',') && (e.preventDefault(), addRecipient(recipientInput))}
-                  placeholder="Add recipients..."
-                  className="flex-1 bg-transparent border-none shadow-none focus-visible:ring-0 text-sm h-8 p-0"
-                />
+                <Input value={recipientInput} onChange={(e) => setRecipientInput(e.target.value)} onKeyDown={(e) => (e.key === 'Enter' || e.key === ',') && (e.preventDefault(), addRecipient(recipientInput))} placeholder="Add recipients..." className="flex-1 bg-transparent border-none shadow-none focus-visible:ring-0 text-sm h-8 p-0" />
               </div>
               <div className="flex items-center border-b border-surface-variant/10 py-3">
                 <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest w-10">Sub</span>

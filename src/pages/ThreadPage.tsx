@@ -26,10 +26,7 @@ export function ThreadPage({ embeddedId, onBack }: ThreadPageProps) {
   const [selectedFrom, setSelectedFrom] = useState('user@aeromail.dev');
   const markAttemptedRef = useRef<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const { data: domains } = useQuery({
-    queryKey: ['domains'],
-    queryFn: () => api<DomainInfo[]>('/api/domains')
-  });
+  const { data: domains } = useQuery({ queryKey: ['domains'], queryFn: () => api<DomainInfo[]>('/api/domains') });
   const enabledDomains = useMemo(() => domains?.filter(d => d.localEnabled) || [], [domains]);
   const { data: threadData, isLoading, error } = useQuery<{ thread: EmailThread }>({
     queryKey: ['thread', id],
@@ -37,11 +34,9 @@ export function ThreadPage({ embeddedId, onBack }: ThreadPageProps) {
     enabled: !!id
   });
   const thread = threadData?.thread;
-  const messages = thread?.messages || [];
+  const messages = useMemo(() => [...(thread?.messages || [])].sort((a, b) => a.timestamp - b.timestamp), [thread?.messages]);
   const scrollToBottom = () => {
-    if (messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior: 'smooth', block: 'end' });
-    }
+    if (messagesEndRef.current) messagesEndRef.current.scrollIntoView({ behavior: 'smooth', block: 'end' });
   };
   useEffect(() => {
     if (messages.length > 0 || isReplying) {
@@ -50,24 +45,18 @@ export function ThreadPage({ embeddedId, onBack }: ThreadPageProps) {
     }
   }, [messages.length, isReplying]);
   const markAsRead = useMutation({
-    mutationFn: (threadId: string) => api(`/api/threads/${threadId}`, {
-      method: 'PATCH',
-      body: JSON.stringify({ isRead: true })
-    }),
+    mutationFn: (threadId: string) => api(`/api/threads/${threadId}`, { method: 'PATCH', body: JSON.stringify({ isRead: true }) }),
     onSuccess: (_, threadId) => {
       queryClient.invalidateQueries({ queryKey: ['threads'] });
-      queryClient.setQueryData(['thread', threadId], (old: any) => {
-        if (!old?.thread) return old;
-        return { ...old, thread: { ...old.thread, unreadCount: 0 } };
-      });
+      queryClient.setQueryData(['thread', threadId], (old: any) => old ? { ...old, thread: { ...old.thread, unreadCount: 0 } } : old);
     }
   });
   useEffect(() => {
-    if (id && thread && thread.unreadCount > 0 && markAttemptedRef.current !== id) {
+    if (id && thread && thread.unreadCount > 0 && markAttemptedRef.current !== id && !markAsRead.isPending) {
       markAttemptedRef.current = id;
       markAsRead.mutate(id);
     }
-  }, [id, thread?.unreadCount, thread, markAsRead]);
+  }, [id, thread?.unreadCount, thread, markAsRead.isPending]);
   useEffect(() => {
     if (enabledDomains.length > 0 && selectedFrom === 'user@aeromail.dev') {
       setSelectedFrom(`hello@${enabledDomains[0].name}`);
@@ -105,7 +94,7 @@ export function ThreadPage({ embeddedId, onBack }: ThreadPageProps) {
     onError: (err: any) => toast.error(err.message || "Failed to send")
   });
   const content = (
-    <div className="w-full h-full flex flex-col">
+    <div className="w-full h-full flex flex-col bg-background">
       <div className="flex-1 overflow-y-auto custom-scrollbar">
         <div className="max-w-4xl mx-auto w-full px-4 lg:px-8 pb-32">
           <header className="sticky top-0 bg-background/80 backdrop-blur-xl z-[20] py-4 flex items-center justify-between border-b border-surface-variant/10 mb-8">
@@ -139,10 +128,7 @@ export function ThreadPage({ embeddedId, onBack }: ThreadPageProps) {
           </div>
         </div>
       </div>
-      <div className={cn(
-        "shrink-0 p-6 bg-gradient-to-t from-background via-background/95 to-transparent pt-10 border-t border-surface-variant/5",
-        embeddedId ? "w-full" : "w-full"
-      )}>
+      <div className="shrink-0 p-6 bg-gradient-to-t from-background via-background/95 to-transparent pt-10 border-t border-surface-variant/5">
         <div className="max-w-4xl mx-auto w-full">
           <AnimatePresence mode="wait">
             {isReplying ? (
@@ -154,27 +140,19 @@ export function ThreadPage({ embeddedId, onBack }: ThreadPageProps) {
                       <SelectTrigger className="h-8 border-none bg-surface-3/50 px-3 rounded-lg text-xs font-bold focus:ring-0 w-auto"><SelectValue /></SelectTrigger>
                       <SelectContent className="rounded-m3-lg">
                         <SelectItem value="user@aeromail.dev" className="text-xs font-bold">user@aeromail.dev</SelectItem>
-                        {enabledDomains.map(d => (
-                          <SelectItem key={d.id} value={`hello@${d.name}`} className="text-xs font-bold">hello@{d.name}</SelectItem>
-                        ))}
+                        {enabledDomains.map(d => <SelectItem key={d.id} value={`hello@${d.name}`} className="text-xs font-bold">hello@{d.name}</SelectItem>)}
                       </SelectContent>
                     </Select>
                   </div>
                   <Button variant="ghost" size="icon" onClick={() => setIsReplying(false)} className="rounded-full"><ChevronDown className="h-4 w-4" /></Button>
                 </div>
                 <div className="p-6">
-                  <Textarea
-                    autoFocus
-                    value={replyBody}
-                    onChange={(e) => setReplyBody(e.target.value)}
-                    placeholder="Write your reply..."
-                    className="min-h-[120px] bg-transparent border-none focus-visible:ring-0 text-base p-0 resize-none shadow-none"
-                  />
+                  <Textarea autoFocus value={replyBody} onChange={(e) => setReplyBody(e.target.value)} placeholder="Write your reply..." className="min-h-[120px] bg-transparent border-none focus-visible:ring-0 text-base p-0 resize-none shadow-none" />
                 </div>
                 <div className="px-6 py-3 border-t flex items-center justify-end bg-surface-2/30 gap-3">
                   <Button variant="ghost" size="sm" onClick={() => setIsReplying(false)} className="rounded-full font-bold">Discard</Button>
                   <Button size="sm" onClick={() => sendReply.mutate(replyBody)} disabled={!replyBody.trim() || sendReply.isPending} className="rounded-full px-8 bg-primary text-white font-bold h-10">
-                    {sendReply.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4 mr-2" />} Send
+                    {sendReply.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <><Send className="h-4 w-4 mr-2" /> Send</>}
                   </Button>
                 </div>
               </motion.div>
@@ -196,8 +174,8 @@ export function ThreadPage({ embeddedId, onBack }: ThreadPageProps) {
           ) : error || !thread ? (
             <div className="max-w-md mx-auto py-20 text-center space-y-6">
                <div className="h-16 w-16 bg-muted rounded-full flex items-center justify-center text-muted-foreground mx-auto"><ArrowLeft className="h-8 w-8" /></div>
-               <h2 className="text-2xl font-black">Message not found</h2>
-               <Button onClick={() => navigate('/')} className="rounded-full">Back to Inbox</Button>
+               <h2 className="text-2xl font-black">Conversation Unavailable</h2>
+               <Button onClick={() => navigate('/')} className="rounded-full">Return to Inbox</Button>
             </div>
           ) : content}
         </div>

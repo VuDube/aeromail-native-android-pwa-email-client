@@ -7,7 +7,7 @@ export class ApiRedirectError extends Error {
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const isAuthPath = path.startsWith('/api/auth/');
   const controller = new AbortController();
-  const timeoutMs = isAuthPath ? 45000 : 15000;
+  const timeoutMs = isAuthPath ? 45000 : 30000; // Increased for search/D1 cold-starts
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const res = await fetch(path, {
@@ -28,29 +28,28 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
       json = JSON.parse(rawText) as ApiResponse<T>;
     } catch (e) {
       const text = rawText.toUpperCase();
-      // DIAGNOSTIC LAYER: Map raw CF errors to human-readable instructions
       if (text.includes('D1_') || text.includes('DATABASE')) {
-        throw new Error("AeroMail Database Error: The 'EMAIL_DB' D1 binding is missing. Please refer to Step 1 of the Technical Documentation (/docs).");
+        throw new Error("AeroMail Database Error: The 'EMAIL_DB' D1 binding is missing or configured incorrectly. Refer to Step 1 of Docs (/docs).");
       }
       if (text.includes('KV_') || text.includes('NAMESPACE')) {
-        throw new Error("AeroMail Storage Error: The 'TOKENS' KV namespace is missing. Please refer to Step 2 of the Technical Documentation (/docs).");
-      }
-      if (res.status === 500) {
-        throw new Error("AeroMail Edge Network Error: The server encountered a problem processing your request. Check Worker Logs for details.");
+        throw new Error("AeroMail Storage Error: The 'TOKENS' KV namespace is missing. Refer to Step 2 of Docs (/docs).");
       }
       if (res.status === 404) {
-        throw new Error(`Endpoint not found: ${path}. Ensure the worker is deployed with current routes.`);
+        throw new Error(`Resource Unavailable: The requested endpoint (${path}) or thread was not found on the edge.`);
       }
-      throw new Error(`Invalid response from Edge Network (${res.status}).`);
+      if (res.status >= 500) {
+        throw new Error("AeroMail Edge Error: The worker encountered a failure. Check Wrangler logs for runtime stacktraces.");
+      }
+      throw new Error(`Unexpected Response Format (${res.status}).`);
     }
     if (!res.ok || !json.success) {
-      const errorMessage = json.error || `Request failed (${res.status})`;
+      const errorMessage = json.error || `Edge Request Failed (${res.status})`;
       throw new Error(errorMessage);
     }
     return json.data!;
   } catch (e: any) {
     if (e.name === 'AbortError') {
-      throw new Error("The request timed out. This often happens if the Edge Function is cold-starting or the Gmail API is unresponsive.");
+      throw new Error("Edge Timeout: The request was aborted because it took too long. This usually indicates high latency or missing DB indices.");
     }
     if (e instanceof ApiRedirectError) throw e;
     console.error("[API ERROR]", e.message);

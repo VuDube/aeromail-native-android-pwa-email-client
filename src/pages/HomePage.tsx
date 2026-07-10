@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useParams, Link } from 'react-router-dom';
 import { api } from '@/lib/api-client';
@@ -23,6 +23,9 @@ export function HomePage() {
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
   const isMobile = useIsMobile();
   const { density } = useDensity();
+  useEffect(() => {
+    setSelectedThreadId(null);
+  }, [folder]);
   const { data: threads, isLoading, isFetching, error } = useQuery<EmailThread[]>({
     queryKey: ['threads', folder, searchQuery],
     queryFn: () => api<EmailThread[]>(`/api/emails?folder=${folder}${searchQuery ? `&q=${encodeURIComponent(searchQuery)}` : ''}`),
@@ -45,7 +48,7 @@ export function HomePage() {
           <div className="flex items-center gap-3">
             {isFetching && <Loader2 className="h-4 w-4 animate-spin text-primary/50" />}
             <Button variant="ghost" size="icon" onClick={handleRefresh} className="rounded-full">
-              <RefreshCw className={cn("h-4 w-4", isFetching && "animate-spin-slow")} />
+              <RefreshCw className={cn("h-4 w-4", isFetching && "animate-spin")} />
             </Button>
           </div>
         </div>
@@ -60,10 +63,7 @@ export function HomePage() {
               isSearchFocused && "bg-background border-primary/20"
             )}
           >
-            <Search className={cn(
-              "absolute left-4 h-4 w-4 transition-colors",
-              isSearchFocused ? "text-primary" : "text-surface-on-variant/40"
-            )} />
+            <Search className={cn("absolute left-4 h-4 w-4 transition-colors", isSearchFocused ? "text-primary" : "text-surface-on-variant/40")} />
             <Input
               value={searchQuery}
               onFocus={() => setIsSearchFocused(true)}
@@ -82,9 +82,9 @@ export function HomePage() {
       </header>
       <section className="flex-1 overflow-y-auto px-2 lg:px-4 pb-24 custom-scrollbar">
         {isLoading ? (
-          <div className="py-20 flex flex-col items-center gap-4">
+          <div className="h-full flex flex-col items-center justify-center gap-4 py-20">
             <Loader2 className="h-8 w-8 animate-spin text-primary/20" />
-            <p className="text-[10px] font-black uppercase tracking-widest opacity-30">Syncing...</p>
+            <p className="text-[10px] font-black uppercase tracking-widest opacity-30">Syncing Edge...</p>
           </div>
         ) : threads && threads.length > 0 ? (
           <div className="space-y-px">
@@ -95,7 +95,7 @@ export function HomePage() {
                 idx={idx}
                 density={density}
                 isActive={selectedThreadId === thread.id}
-                onSelect={(id) => isMobile ? null : setSelectedThreadId(id)}
+                onSelect={isMobile ? undefined : (id) => setSelectedThreadId(id)}
                 onArchive={(id) => {
                   toggleMutation.mutate({ id, updates: { folder: 'trash' } });
                   if (selectedThreadId === id) setSelectedThreadId(null);
@@ -107,9 +107,9 @@ export function HomePage() {
             ))}
           </div>
         ) : (
-          <div className="py-20 flex flex-col items-center text-center gap-6 opacity-40">
+          <div className="h-full flex flex-col items-center justify-center text-center gap-6 opacity-40 py-20">
             <InboxIcon className="h-10 w-10" />
-            <p className="text-sm font-bold tracking-tight">No messages found</p>
+            <p className="text-sm font-bold tracking-tight">No messages in {folder}</p>
           </div>
         )}
       </section>
@@ -122,7 +122,7 @@ export function HomePage() {
           <Database className="h-12 w-12 text-destructive" />
           <h2 className="text-3xl font-black tracking-tighter">Connection Error</h2>
           <p className="text-muted-foreground text-sm max-w-xs text-center">{(error as any).message}</p>
-          <Button onClick={() => window.location.reload()} className="rounded-full px-10 h-14 font-black">Retry</Button>
+          <Button onClick={() => window.location.reload()} className="rounded-full px-10 h-14 font-black">Retry Connection</Button>
         </div>
       </AppLayout>
     );
@@ -144,20 +144,12 @@ export function HomePage() {
                   <div className="h-full bg-surface-1/30">
                     <AnimatePresence mode="wait">
                       {selectedThreadId ? (
-                        <motion.div
-                          key={selectedThreadId}
-                          initial={{ opacity: 0, x: 20 }}
-                          animate={{ opacity: 1, x: 0 }}
-                          exit={{ opacity: 0, x: -20 }}
-                          className="h-full"
-                        >
+                        <motion.div key={selectedThreadId} initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="h-full">
                           <ThreadPage embeddedId={selectedThreadId} onBack={() => setSelectedThreadId(null)} />
                         </motion.div>
                       ) : (
                         <div className="h-full flex flex-col items-center justify-center text-center p-12 space-y-4">
-                          <div className="h-24 w-24 bg-surface-2 rounded-full flex items-center justify-center">
-                            <Sparkles className="h-10 w-10 text-primary/20" />
-                          </div>
+                          <div className="h-24 w-24 bg-surface-2 rounded-full flex items-center justify-center"><Sparkles className="h-10 w-10 text-primary/20" /></div>
                           <h3 className="text-2xl font-black tracking-tight">Select a conversation</h3>
                           <p className="text-muted-foreground text-sm max-w-xs">Pick an email from the list to view its contents and reply.</p>
                         </div>
@@ -171,12 +163,7 @@ export function HomePage() {
         </div>
       </div>
       <Link to="/compose">
-        <motion.button
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
-          className="m3-fab shadow-xl shadow-primary/30"
-          layoutId="compose-fab"
-        >
+        <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} className="m3-fab shadow-xl shadow-primary/30" layoutId="compose-fab">
           <Plus className="h-10 w-10" />
         </motion.button>
       </Link>
