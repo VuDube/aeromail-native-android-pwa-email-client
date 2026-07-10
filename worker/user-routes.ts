@@ -230,19 +230,16 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
       if (body.isRead !== undefined) {
         threadUpdates.push("unread_count = ?");
         threadParams.push(body.isRead ? 0 : 1);
-        // Sync child emails
         statements.push(db.prepare("UPDATE emails SET is_read = ? WHERE thread_id = ?").bind(body.isRead ? 1 : 0, id));
       }
       if (body.isStarred !== undefined) {
         threadUpdates.push("is_starred = ?");
         threadParams.push(body.isStarred ? 1 : 0);
-        // Sync child emails
         statements.push(db.prepare("UPDATE emails SET is_starred = ? WHERE thread_id = ?").bind(body.isStarred ? 1 : 0, id));
       }
       if (body.folder !== undefined) {
         threadUpdates.push("folder = ?");
         threadParams.push(body.folder);
-        // Sync child emails
         statements.push(db.prepare("UPDATE emails SET folder = ? WHERE thread_id = ?").bind(body.folder, id));
       }
       if (threadUpdates.length > 0) {

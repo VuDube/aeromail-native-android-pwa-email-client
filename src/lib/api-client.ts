@@ -19,23 +19,23 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
       ...init
     });
     if (res.redirected) {
-      // Use replace to avoid polluting history in PWA standalone mode
       window.location.replace(res.url);
       throw new ApiRedirectError(res.url);
     }
     const rawText = await res.text();
-    let json: ApiResponse<T> & { meta?: { demo_mode?: boolean } };
+    let json: ApiResponse<T>;
     try {
       json = JSON.parse(rawText) as ApiResponse<T>;
     } catch (e) {
       const text = rawText.toUpperCase();
-      if (text.includes('D1_') || text.includes('DATABASE') || text.includes('SQLITE') || res.status === 500) {
-        throw new Error("D1 Infrastructure Error: The database is not properly bound or initialized. Ensure 'EMAIL_DB' is present in wrangler.jsonc.");
+      // Handle known Cloudflare environment errors specifically
+      if (text.includes('D1_') || text.includes('DATABASE') || res.status === 500) {
+        throw new Error("AeroMail Database Error: The D1 database binding 'EMAIL_DB' is missing or not initialized. Check your Cloudflare dashboard.");
       }
       if (text.includes('KV_') || text.includes('NAMESPACE')) {
-        throw new Error("KV Infrastructure Error: The 'TOKENS' namespace is not bound. Verify your worker configuration.");
+        throw new Error("AeroMail Tokens Error: The 'TOKENS' KV namespace is not bound. Verify your worker settings.");
       }
-      throw new Error(`Server Error (${res.status}): Invalid response format from ${path}`);
+      throw new Error(`Server Error (${res.status}): Invalid response from ${path}`);
     }
     if (!res.ok || !json.success) {
       const errorMessage = json.error || `Request failed (${res.status})`;
