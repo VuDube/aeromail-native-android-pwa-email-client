@@ -1,4 +1,4 @@
-import type { ApiResponse } from "@shared/types";
+import type { ApiResponse } from "../shared/types";
 import type { Context } from "hono";
 export interface Env {
   EMAIL_DB: D1Database;
@@ -37,27 +37,10 @@ export async function fetchCloudflare<T>(env: Env, path: string, init?: RequestI
   }
   return data.result as T;
 }
-export async function getCloudflareZones(env: Env) {
-  return fetchCloudflare<any[]>(env, "/zones");
-}
-export async function getZoneEmailRoutingStatus(env: Env, zoneId: string) {
-  try {
-    const res = await fetchCloudflare<any>(env, `/zones/${zoneId}/email/routing`);
-    return res.status === "enabled";
-  } catch {
-    return false;
-  }
-}
 async function getCryptoKey(secret: string) {
   const enc = new TextEncoder();
   const keyData = enc.encode(secret.padEnd(32, '0').slice(0, 32));
-  return crypto.subtle.importKey(
-    "raw",
-    keyData,
-    { name: "AES-GCM" },
-    false,
-    ["encrypt", "decrypt"]
-  );
+  return crypto.subtle.importKey("raw", keyData, { name: "AES-GCM" }, false, ["encrypt", "decrypt"]);
 }
 export async function encrypt(text: string, secret: string): Promise<string> {
   const key = await getCryptoKey(secret);
@@ -78,9 +61,7 @@ export async function decrypt(encryptedBase64: string, secret: string): Promise<
   return new TextDecoder().decode(decrypted);
 }
 export async function getGmailAccessToken(env: Env): Promise<string | null> {
-  if (!env.TOKENS || !env.ENCRYPTION_SECRET || !env.GMAIL_CLIENT_ID || !env.GMAIL_CLIENT_SECRET) {
-    return null;
-  }
+  if (!env.TOKENS || !env.ENCRYPTION_SECRET || !env.GMAIL_CLIENT_ID || !env.GMAIL_CLIENT_SECRET) return null;
   const encryptedToken = await env.TOKENS.get("gmail_refresh_token");
   if (!encryptedToken) return null;
   try {
@@ -97,37 +78,5 @@ export async function getGmailAccessToken(env: Env): Promise<string | null> {
     });
     const data = await response.json() as any;
     return data.access_token || null;
-  } catch {
-    return null;
-  }
-}
-export function constructMimeMessage(to: string, subject: string, body: string, from?: string): string {
-  const mime = [
-    from ? `From: ${from}` : '',
-    `To: ${to}`,
-    `Subject: ${subject}`,
-    `Content-Type: text/plain; charset="UTF-8"`,
-    `MIME-Version: 1.0`,
-    '',
-    body
-  ].filter(Boolean).join('\r\n');
-  return btoa(mime)
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
-    .replace(/=+$/, '');
-}
-export async function sendViaGmail(accessToken: string, rawMessage: string) {
-  const response = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/messages/send", {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${accessToken}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ raw: rawMessage }),
-  });
-  if (!response.ok) {
-    const err = await response.text();
-    throw new Error(`Gmail API Error: ${err}`);
-  }
-  return response.json();
+  } catch { return null; }
 }

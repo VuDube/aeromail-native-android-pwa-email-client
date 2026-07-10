@@ -1,7 +1,7 @@
 import { Hono } from "hono";
-import { ok, bad, internalError, notFound, Env, getGmailAccessToken, encrypt, decrypt } from './core-utils';
-import { MOCK_USERS, MOCK_EMAILS } from "@shared/mock-data";
-import { DomainInfo, EmailThread } from "@shared/types";
+import { ok, bad, internalError, notFound, Env, getGmailAccessToken, encrypt, decrypt, fetchCloudflare } from './core-utils';
+import { MOCK_USERS, MOCK_EMAILS } from "../shared/mock-data";
+import { DomainInfo, EmailThread } from "../shared/types";
 export function userRoutes(app: Hono<{ Bindings: Env }>) {
   // --- AUTH ENDPOINTS ---
   app.get('/api/auth/status', async (c) => {
@@ -11,12 +11,8 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
   });
   app.get('/api/auth/login', async (c) => {
     const { GMAIL_CLIENT_ID, REDIRECT_URI } = c.env;
-    if (!GMAIL_CLIENT_ID || !REDIRECT_URI) return bad(c, "OAuth configuration missing: GMAIL_CLIENT_ID or REDIRECT_URI");
-    const scopes = [
-      'https://www.googleapis.com/auth/gmail.send',
-      'https://www.googleapis.com/auth/userinfo.email',
-      'openid'
-    ].join(' ');
+    if (!GMAIL_CLIENT_ID || !REDIRECT_URI) return bad(c, "OAuth configuration missing");
+    const scopes = ['https://www.googleapis.com/auth/gmail.send', 'https://www.googleapis.com/auth/userinfo.email', 'openid'].join(' ');
     const params = new URLSearchParams({
       client_id: GMAIL_CLIENT_ID,
       redirect_uri: REDIRECT_URI,
@@ -31,7 +27,7 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
     const code = c.req.query('code');
     const { GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, REDIRECT_URI, ENCRYPTION_SECRET, TOKENS } = c.env;
     if (!code || !GMAIL_CLIENT_ID || !GMAIL_CLIENT_SECRET || !REDIRECT_URI || !ENCRYPTION_SECRET || !TOKENS) {
-      return bad(c, "Missing callback parameters or server-side infrastructure (KV/Secrets)");
+      return bad(c, "Missing callback parameters or server infrastructure");
     }
     try {
       const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
@@ -50,10 +46,6 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
       if (tokens.refresh_token) {
         const encrypted = await encrypt(tokens.refresh_token, ENCRYPTION_SECRET);
         await TOKENS.put("gmail_refresh_token", encrypted);
-      } else {
-        // If no refresh token, we check if we already have one
-        const existing = await TOKENS.get("gmail_refresh_token");
-        if (!existing) return bad(c, "No refresh token returned. Try revoking app access in Google settings.");
       }
       return c.redirect('/settings?auth=success');
     } catch (e: any) {
@@ -61,62 +53,46 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
     }
   });
   app.post('/api/auth/disconnect', async (c) => {
-    if (c.env.TOKENS) {
-      await c.env.TOKENS.delete("gmail_refresh_token");
-    }
+    if (c.env.TOKENS) await c.env.TOKENS.delete("gmail_refresh_token");
     return ok(c, { success: true });
   });
-  // --- THREAD & EMAIL ENDPOINTS ---
-  app.get('/api/status', async (c) => {
-    return ok(c, {
-      gmail_config: !!(c.env.GMAIL_CLIENT_ID && c.env.GMAIL_CLIENT_SECRET),
-      cf_token_ready: !!c.env.CF_API_TOKEN,
-      kv_ready: !!c.env.TOKENS,
-      db_ready: !!c.env.EMAIL_DB,
-      demo_mode: !c.env.EMAIL_DB,
-      version: '2.0.0-production'
-    });
-  });
-  app.patch('/api/threads/:id', async (c) => {
+  // --- DOMAIN DISCOVERY & MANAGEMENT ---
+  app.get('/api/domains', async (c) => {
     const db = c.env.EMAIL_DB;
-    const id = c.req.param('id');
-    const body = await c.req.json();
-    if (!db) return ok(c, { id, simulated: true });
-    const updates: string[] = [];
-    const params: any[] = [];
-    if (body.isRead !== undefined) {
-      updates.push("unread_count = ?");
-      params.push(body.isRead ? 0 : 1);
-    }
-    if (body.isStarred !== undefined) {
-      updates.push("is_starred = ?");
-      params.push(body.isStarred ? 1 : 0);
-    }
-    if (body.folder !== undefined) {
-      updates.push("folder = ?");
-      params.push(body.folder);
-    }
-    if (updates.length === 0) return bad(c, "No valid updates provided");
-    params.push(id);
+    if (!db) return ok(c, []);
     try {
-      await db.prepare(`UPDATE threads SET ${updates.join(', ')} WHERE id = ?`).bind(...params).run();
-      // Propagate starred/read status to individual emails in the thread
-      if (body.isStarred !== undefined) {
-        await db.prepare("UPDATE emails SET is_starred = ? WHERE thread_id = ?").bind(body.isStarred ? 1 : 0, id).run();
+      // 1. Fetch live zones from Cloudflare API if token is present
+      let apiZones: any[] = [];
+      if (c.env.CF_API_TOKEN) {
+        try {
+          apiZones = await fetchCloudflare<any[]>(c.env, "/zones");
+        } catch (e) {
+          console.error("CF API Error:", e);
+        }
       }
-      if (body.isRead !== undefined) {
-        await db.prepare("UPDATE emails SET is_read = ? WHERE thread_id = ?").bind(body.isRead ? 1 : 0, id).run();
-      }
-      return ok(c, { id, updated: true });
+      // 2. Fetch local registration state
+      const { results: localRegistrations } = await db.prepare(
+        "SELECT domain_id FROM user_domains WHERE user_id = 'me'"
+      ).all() as any;
+      const localSet = new Set(localRegistrations?.map((r: any) => r.domain_id) || []);
+      // 3. Merge data
+      const domains: DomainInfo[] = apiZones.map(z => ({
+        id: z.id,
+        name: z.name,
+        status: z.status === 'active' ? 'active' : 'pending',
+        isRoutingEnabled: true, // Simplified for demo
+        localEnabled: localSet.has(z.id)
+      }));
+      return ok(c, domains);
     } catch (e: any) {
       return internalError(c, e.message);
     }
   });
   app.post('/api/domains/toggle', async (c) => {
     const db = c.env.EMAIL_DB;
-    if (!db) return bad(c, "D1 Database required for domain management");
+    if (!db) return bad(c, "D1 Database required");
     const { domainId, domainName, enabled } = await c.req.json();
-    if (!domainId || !domainName) return bad(c, "domainId and domainName required");
+    if (!domainId || !domainName) return bad(c, "Missing parameters");
     try {
       if (enabled) {
         await db.batch([
@@ -131,31 +107,21 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
       return internalError(c, e.message);
     }
   });
-  app.get('/api/domains', async (c) => {
-    const db = c.env.EMAIL_DB;
-    if (!db) return ok(c, []);
-    try {
-      const { results: localDomains } = await db.prepare("SELECT domain_id FROM user_domains WHERE user_id = 'me'").all() as any;
-      const localSet = new Set(localDomains.map((ld: any) => ld.domain_id));
-      const { results: zones } = await db.prepare("SELECT * FROM domains").all() as any;
-      return ok(c, zones.map((z: any) => ({
-        id: z.id,
-        name: z.domain_name,
-        status: z.is_active ? 'active' : 'inactive',
-        isRoutingEnabled: true,
-        localEnabled: localSet.has(z.id)
-      })));
-    } catch (e: any) {
-      console.error("[DOMAINS API ERROR]", e);
-      return ok(c, []);
-    }
+  // --- THREAD & EMAIL ENDPOINTS ---
+  app.get('/api/status', async (c) => {
+    return ok(c, {
+      gmail_ready: !!(c.env.GMAIL_CLIENT_ID && c.env.TOKENS),
+      cf_ready: !!c.env.CF_API_TOKEN,
+      db_ready: !!c.env.EMAIL_DB,
+      demo_mode: !c.env.EMAIL_DB
+    });
   });
   app.get('/api/emails', async (c) => {
     const db = c.env.EMAIL_DB;
     const folder = c.req.query('folder') || 'inbox';
     if (!db) {
-      const mockThreads: EmailThread[] = MOCK_EMAILS
-        .filter(e => e.folder === folder || (folder === 'starred' && e.isStarred))
+      const mock = MOCK_EMAILS
+        .filter(e => folder === 'starred' ? e.isStarred : e.folder === folder)
         .map(e => ({
           id: e.threadId,
           lastMessageAt: e.timestamp,
@@ -166,88 +132,79 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
           folder: e.folder as any,
           participantNames: [e.from.name]
         }));
-      return ok(c, mockThreads);
+      return ok(c, mock);
     }
-    const { results } = await db.prepare(`
-      SELECT t.*, 
-      (SELECT GROUP_CONCAT(from_name, ', ') FROM (SELECT DISTINCT from_name FROM emails WHERE thread_id = t.id)) as participantNames
-      FROM threads t
-      WHERE (? = 'starred' AND is_starred = 1) OR folder = ?
-      ORDER BY last_message_at DESC
-      LIMIT 100
-    `).bind(folder, folder).all();
-    const formatted = results.map((r: any) => ({
+    const query = folder === 'starred' 
+      ? "SELECT t.*, (SELECT GROUP_CONCAT(from_name, ', ') FROM (SELECT DISTINCT from_name FROM emails WHERE thread_id = t.id)) as participantNames FROM threads t WHERE is_starred = 1 ORDER BY last_message_at DESC"
+      : "SELECT t.*, (SELECT GROUP_CONCAT(from_name, ', ') FROM (SELECT DISTINCT from_name FROM emails WHERE thread_id = t.id)) as participantNames FROM threads t WHERE folder = ? ORDER BY last_message_at DESC";
+    const { results } = await (folder === 'starred' ? db.prepare(query).all() : db.prepare(query).bind(folder).all());
+    return ok(c, results.map((r: any) => ({
       ...r,
       participantNames: r.participantNames ? r.participantNames.split(', ') : [],
       isStarred: !!r.is_starred,
       unreadCount: r.unread_count || 0
-    }));
-    return ok(c, formatted);
+    })));
   });
   app.get('/api/threads/:id', async (c) => {
     const db = c.env.EMAIL_DB;
     const id = c.req.param('id');
     if (!db) {
-      const mockEmail = MOCK_EMAILS.find(e => e.threadId === id) || MOCK_EMAILS[0];
-      return ok(c, {
-        thread: {
-          id: mockEmail.threadId,
-          subject: mockEmail.subject,
-          lastMessageAt: mockEmail.timestamp,
-          unreadCount: 0,
-          isStarred: mockEmail.isStarred,
-          messages: [mockEmail]
-        }
-      });
+      const e = MOCK_EMAILS.find(x => x.threadId === id) || MOCK_EMAILS[0];
+      return ok(c, { thread: { ...e, messages: [e] } });
     }
     const thread = await db.prepare("SELECT * FROM threads WHERE id = ?").bind(id).first() as any;
-    if (!thread) return notFound(c, "Thread not found");
+    if (!thread) return notFound(c);
     const messages = await db.prepare("SELECT * FROM emails WHERE thread_id = ? ORDER BY timestamp ASC").bind(id).all();
-    const formattedMessages = messages.results.map((m: any) => ({
-      ...m,
-      from: { name: m.from_name, email: m.from_email },
-      to: JSON.parse(m.to_json),
-      isRead: !!m.is_read,
-      isStarred: !!m.is_starred
-    }));
     return ok(c, {
       thread: {
         ...thread,
         isStarred: !!thread.is_starred,
-        unreadCount: thread.unread_count,
-        messages: formattedMessages
+        messages: messages.results.map((m: any) => ({
+          ...m,
+          from: { name: m.from_name, email: m.from_email },
+          to: JSON.parse(m.to_json),
+          isRead: !!m.is_read,
+          isStarred: !!m.is_starred
+        }))
       }
     });
   });
+  app.patch('/api/threads/:id', async (c) => {
+    const db = c.env.EMAIL_DB;
+    const id = c.req.param('id');
+    const body = await c.req.json();
+    if (!db) return ok(c, { id });
+    const updates: string[] = [];
+    const params: any[] = [];
+    if (body.isRead !== undefined) { updates.push("unread_count = ?"); params.push(body.isRead ? 0 : 1); }
+    if (body.isStarred !== undefined) { updates.push("is_starred = ?"); params.push(body.isStarred ? 1 : 0); }
+    if (body.folder !== undefined) { updates.push("folder = ?"); params.push(body.folder); }
+    if (updates.length > 0) {
+      params.push(id);
+      await db.prepare(`UPDATE threads SET ${updates.join(', ')} WHERE id = ?`).bind(...params).run();
+    }
+    return ok(c, { id });
+  });
   app.post('/api/emails/send', async (c) => {
     const db = c.env.EMAIL_DB;
-    const { to, subject, body, threadId, fromEmail } = await c.req.json();
-    if (!db) return bad(c, "Demo Mode: Email sending is simulated. Connect D1.");
-    const accessToken = await getGmailAccessToken(c.env);
-    const senderEmail = fromEmail || "user@aeromail.dev";
+    const { to, subject, body, fromEmail } = await c.req.json();
+    if (!db) return bad(c, "Demo Mode: Connect D1 to send");
+    const token = await getGmailAccessToken(c.env);
     const id = crypto.randomUUID();
-    const tid = threadId || crypto.randomUUID();
     const ts = Date.now();
-    const snippet = body.slice(0, 100);
-    await db.batch([
-      db.prepare("INSERT INTO threads (id, subject, last_message_at, snippet, folder, unread_count) VALUES (?, ?, ?, ?, 'sent', 0) ON CONFLICT(id) DO UPDATE SET last_message_at = excluded.last_message_at, snippet = excluded.snippet").bind(tid, subject, ts, snippet),
-      db.prepare("INSERT INTO emails (id, thread_id, from_name, from_email, to_json, subject, body, snippet, timestamp, folder, is_read) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'sent', 1)").bind(id, tid, "Aero User", senderEmail, JSON.stringify([{ email: to }]), subject, body, snippet, ts)
-    ]);
-    return ok(c, { id, delivered: !!accessToken, from: senderEmail });
+    await db.prepare("INSERT INTO emails (id, thread_id, from_name, from_email, to_json, subject, body, snippet, timestamp, folder, is_read) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'sent', 1)")
+      .bind(id, id, "Aero User", fromEmail || "user@aeromail.dev", JSON.stringify([{ email: to }]), subject, body, body.slice(0, 100), ts).run();
+    return ok(c, { id, delivered: !!token });
   });
   app.post('/api/simulate/inbound', async (c) => {
     const db = c.env.EMAIL_DB;
-    if (!db) return bad(c, "Simulation requires an active D1 binding.");
-    const id = crypto.randomUUID();
+    if (!db) return bad(c, "Simulation requires D1");
     const tid = crypto.randomUUID().slice(0, 8);
     const ts = Date.now();
-    const subject = "Simulation: New Edge Capability";
-    const body = "This is an automated simulation of an inbound email routing event.";
     await db.batch([
-      db.prepare("INSERT INTO threads (id, subject, last_message_at, snippet, unread_count, folder) VALUES (?, ?, ?, ?, 1, 'inbox')").bind(tid, subject, ts, body.slice(0, 100)),
-      db.prepare("INSERT INTO emails (id, thread_id, from_name, from_email, to_json, subject, body, snippet, timestamp, folder, is_read) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'inbox', 0)").bind(id, tid, "Edge Simulator", "bot@cloudflare.com", JSON.stringify([{ email: "user@aeromail.dev" }]), subject, body, body.slice(0, 100), ts)
+      db.prepare("INSERT INTO threads (id, subject, last_message_at, snippet, unread_count, folder) VALUES (?, 'Simulation', ?, 'Test message', 1, 'inbox')").bind(tid, ts),
+      db.prepare("INSERT INTO emails (id, thread_id, from_name, from_email, to_json, subject, body, snippet, timestamp, folder, is_read) VALUES (?, ?, 'Simulator', 'bot@cf.com', '[]', 'Simulation', 'Body', 'Snippet', ?, 'inbox', 0)").bind(crypto.randomUUID(), tid, ts)
     ]);
-    return ok(c, { threadId: tid, success: true });
+    return ok(c, { threadId: tid });
   });
-  app.get('/api/me', (c) => ok(c, MOCK_USERS[0]));
 }

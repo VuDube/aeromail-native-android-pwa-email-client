@@ -37,15 +37,10 @@ export function ThreadPage() {
       body: JSON.stringify({ isRead: true })
     }),
     onSuccess: (_, threadId) => {
-      // Optimistic update for the specific thread cache
       queryClient.setQueryData(['thread', threadId], (old: any) => {
         if (!old?.thread) return old;
-        return {
-          ...old,
-          thread: { ...old.thread, unreadCount: 0 }
-        };
+        return { ...old, thread: { ...old.thread, unreadCount: 0 } };
       });
-      // Invalidate list to refresh unread badges elsewhere
       queryClient.invalidateQueries({ queryKey: ['threads'] });
     }
   });
@@ -54,7 +49,7 @@ export function ThreadPage() {
       markAttemptedRef.current = id;
       markAsRead.mutate(id);
     }
-  }, [id, thread?.unreadCount, markAsRead]);
+  }, [id, thread?.unreadCount, markAsRead, thread]); // Fixed missing 'thread' dependency
   useEffect(() => {
     if (enabledDomains.length > 0 && selectedFrom === 'user@aeromail.dev') {
       setSelectedFrom(`hello@${enabledDomains[0].name}`);
@@ -62,11 +57,12 @@ export function ThreadPage() {
   }, [enabledDomains, selectedFrom]);
   const sendReply = useMutation({
     mutationFn: (body: string) => {
-      if (!thread || !messages.length) throw new Error("Thread not loaded");
+      if (!thread || !messages.length) throw new Error("Conversation state missing");
+      const lastMsg = messages[messages.length - 1];
       return api('/api/emails/send', {
         method: 'POST',
         body: JSON.stringify({
-          to: messages[messages.length - 1].from.email,
+          to: lastMsg.from.email,
           subject: `Re: ${thread.subject}`,
           body: body.trim(),
           threadId: thread.id,
@@ -109,19 +105,12 @@ export function ThreadPage() {
               <div className="max-w-4xl mx-auto px-4 md:px-8">
                 <AnimatePresence mode="wait">
                   {isReplying ? (
-                    <motion.div
-                      initial={{ y: 20, opacity: 0 }}
-                      animate={{ y: 0, opacity: 1 }}
-                      exit={{ y: 20, opacity: 0 }}
-                      className="bg-surface-1 shadow-2xl rounded-m3-xl border border-primary/20 overflow-hidden flex flex-col"
-                    >
-                      <div className="px-8 py-4 border-b flex items-center justify-between bg-surface-2/50 shrink-0">
+                    <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 20, opacity: 0 }} className="bg-surface-1 shadow-2xl rounded-m3-xl border border-primary/20 overflow-hidden flex flex-col">
+                      <div className="px-8 py-4 border-b flex items-center justify-between bg-surface-2/50">
                         <div className="flex items-center gap-3">
                           <span className="text-[10px] font-black uppercase tracking-[0.2em] text-primary">From</span>
                           <Select value={selectedFrom} onValueChange={setSelectedFrom}>
-                            <SelectTrigger className="h-8 border-none bg-surface-3/50 px-3 rounded-lg text-xs font-bold focus:ring-0 w-auto">
-                              <SelectValue />
-                            </SelectTrigger>
+                            <SelectTrigger className="h-8 border-none bg-surface-3/50 px-3 rounded-lg text-xs font-bold focus:ring-0 w-auto"><SelectValue /></SelectTrigger>
                             <SelectContent className="rounded-m3-lg">
                               <SelectItem value="user@aeromail.dev" className="text-xs font-bold">user@aeromail.dev</SelectItem>
                               {enabledDomains.map(d => (
@@ -133,29 +122,17 @@ export function ThreadPage() {
                         <Button variant="ghost" size="icon" onClick={() => setIsReplying(false)} className="rounded-full"><ChevronDown className="h-5 w-5" /></Button>
                       </div>
                       <div className="p-8">
-                        <Textarea
-                          autoFocus
-                          value={replyBody}
-                          onChange={(e) => setReplyBody(e.target.value)}
-                          placeholder="Type your message..."
-                          className="min-h-[150px] bg-transparent border-none focus-visible:ring-0 text-base p-0 resize-none shadow-none"
-                        />
+                        <Textarea autoFocus value={replyBody} onChange={(e) => setReplyBody(e.target.value)} placeholder="Type your message..." className="min-h-[150px] bg-transparent border-none focus-visible:ring-0 text-base p-0 resize-none shadow-none" />
                       </div>
                       <div className="px-8 py-4 border-t flex items-center justify-end bg-surface-2/30 gap-4">
                         <Button variant="ghost" onClick={() => setIsReplying(false)} className="rounded-full font-bold">Discard</Button>
-                        <Button
-                          onClick={() => sendReply.mutate(replyBody)}
-                          disabled={!replyBody.trim() || sendReply.isPending}
-                          className="rounded-full px-10 bg-primary text-white font-bold h-11"
-                        >
+                        <Button onClick={() => sendReply.mutate(replyBody)} disabled={!replyBody.trim() || sendReply.isPending} className="rounded-full px-10 bg-primary text-white font-bold h-11">
                           {sendReply.isPending ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5 mr-2" />} Send
                         </Button>
                       </div>
                     </motion.div>
                   ) : (
-                    <div className="flex gap-4">
-                      <Button onClick={() => setIsReplying(true)} className="flex-1 rounded-full h-16 bg-primary text-white font-bold text-lg shadow-xl shadow-primary/20 gap-3"><Reply className="h-6 w-6" /> Reply</Button>
-                    </div>
+                    <Button onClick={() => setIsReplying(true)} className="w-full rounded-full h-16 bg-primary text-white font-bold text-lg shadow-xl shadow-primary/20 gap-3"><Reply className="h-6 w-6" /> Reply</Button>
                   )}
                 </AnimatePresence>
               </div>
