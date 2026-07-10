@@ -32,12 +32,15 @@ export function ThreadPage() {
   });
   const thread = threadData?.thread;
   const messages = thread?.messages || [];
-  // Automated scroll to bottom when messages list changes or isReplying toggles
+  const scrollToBottom = () => {
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    }
+  };
   useEffect(() => {
-    if (messages.length > 0) {
-      setTimeout(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
-      }, 100);
+    if (messages.length > 0 || isReplying) {
+      const timer = setTimeout(scrollToBottom, 150);
+      return () => clearTimeout(timer);
     }
   }, [messages.length, isReplying]);
   const markAsRead = useMutation({
@@ -83,7 +86,9 @@ export function ThreadPage() {
       toast.success("Reply sent");
       setReplyBody('');
       setIsReplying(false);
+      // Invalidate both current thread and inbox list to ensure snippet/timestamp sync
       queryClient.invalidateQueries({ queryKey: ['thread', id] });
+      queryClient.invalidateQueries({ queryKey: ['threads'] });
     },
     onError: (err: any) => toast.error(err.message || "Failed to send")
   });

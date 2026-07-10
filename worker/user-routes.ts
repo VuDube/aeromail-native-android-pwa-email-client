@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { ok, bad, internalError, notFound, Env, getGmailAccessToken, encrypt, decrypt, fetchCloudflare } from './core-utils';
 import { MOCK_USERS, MOCK_EMAILS } from "../shared/mock-data";
-import { DomainInfo, EmailThread } from "../shared/types";
+import { DomainInfo } from "../shared/types";
 export function userRoutes(app: Hono<{ Bindings: Env }>) {
   // --- AUTH ENDPOINTS ---
   app.get('/api/auth/status', async (c) => {
@@ -11,7 +11,9 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
   });
   app.get('/api/auth/login', async (c) => {
     const { GMAIL_CLIENT_ID, REDIRECT_URI } = c.env;
-    if (!GMAIL_CLIENT_ID || !REDIRECT_URI) return bad(c, "OAuth configuration missing");
+    if (!GMAIL_CLIENT_ID || !REDIRECT_URI) {
+      return bad(c, "GMAIL_CLIENT_ID or REDIRECT_URI missing in Cloudflare Secrets. Please check Docs.");
+    }
     const scopes = ['https://www.googleapis.com/auth/gmail.send', 'https://www.googleapis.com/auth/userinfo.email', 'openid'].join(' ');
     const params = new URLSearchParams({
       client_id: GMAIL_CLIENT_ID,
@@ -26,8 +28,9 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
   app.get('/api/auth/callback', async (c) => {
     const code = c.req.query('code');
     const { GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, REDIRECT_URI, ENCRYPTION_SECRET, TOKENS } = c.env;
-    if (!code || !GMAIL_CLIENT_ID || !GMAIL_CLIENT_SECRET || !REDIRECT_URI || !ENCRYPTION_SECRET || !TOKENS) {
-      return bad(c, "Missing callback parameters or server infrastructure");
+    if (!code) return bad(c, "Authorization code missing");
+    if (!GMAIL_CLIENT_ID || !GMAIL_CLIENT_SECRET || !REDIRECT_URI || !ENCRYPTION_SECRET || !TOKENS) {
+      return bad(c, "Server infrastructure secrets are not fully configured. Ensure TOKENS, ENCRYPTION_SECRET, GMAIL_CLIENT_ID, and GMAIL_CLIENT_SECRET are set.");
     }
     try {
       const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
@@ -49,6 +52,7 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
       }
       return c.redirect('/settings?auth=success');
     } catch (e: any) {
+      console.error("[AUTH CALLBACK ERROR]", e);
       return internalError(c, e.message);
     }
   });
@@ -87,7 +91,7 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
   });
   app.post('/api/domains/toggle', async (c) => {
     const db = c.env.EMAIL_DB;
-    if (!db) return bad(c, "D1 Database required");
+    if (!db) return bad(c, "D1 Database required for domain identity storage");
     const { domainId, domainName, enabled } = await c.req.json();
     if (!domainId || !domainName) return bad(c, "Missing parameters");
     try {
@@ -101,6 +105,7 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
       }
       return ok(c, { domainId, enabled });
     } catch (e: any) {
+      console.error("[DOMAIN TOGGLE ERROR]", e);
       return internalError(c, e.message);
     }
   });
@@ -150,30 +155,10 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
       unreadCount: r.unread_count || 0
     })));
   });
-  app.post('/api/drafts', async (c) => {
-    const db = c.env.EMAIL_DB;
-    if (!db) return bad(c, "D1 required");
-    const { subject, body, from, to } = await c.req.json();
-    const id = crypto.randomUUID();
-    const ts = Date.now();
-    const tid = crypto.randomUUID().slice(0, 16);
-    try {
-      await db.batch([
-        db.prepare("INSERT INTO threads (id, subject, last_message_at, snippet, unread_count, folder) VALUES (?, ?, ?, ?, 0, 'drafts')")
-          .bind(tid, subject, ts, body.slice(0, 100)),
-        db.prepare("INSERT INTO emails (id, thread_id, from_name, from_email, to_json, subject, body, snippet, timestamp, folder, is_read) VALUES (?, ?, 'Me', ?, ?, ?, ?, ?, ?, 'drafts', 1)")
-          .bind(id, tid, from, JSON.stringify(to || []), subject, body, body.slice(0, 100), ts)
-      ]);
-      return ok(c, { id, threadId: tid });
-    } catch (e: any) {
-      console.error("[D1 DRAFT ERROR]", e);
-      return internalError(c, "Failed to save draft");
-    }
-  });
   app.post('/api/emails/send', async (c) => {
     const db = c.env.EMAIL_DB;
     const { to, subject, body, fromEmail, threadId } = await c.req.json();
-    if (!db) return bad(c, "Demo Mode: Connect D1 to send");
+    if (!db) return bad(c, "Simulation Mode: Bind a D1 database to 'EMAIL_DB' to send messages.");
     const token = await getGmailAccessToken(c.env);
     const id = crypto.randomUUID();
     const ts = Date.now();
@@ -183,15 +168,15 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
         db.prepare(`
           INSERT INTO threads (id, subject, last_message_at, snippet, unread_count, folder)
           VALUES (?, ?, ?, ?, 0, 'sent')
-          ON CONFLICT(id) DO UPDATE SET folder = 'sent', last_message_at = excluded.last_message_at
+          ON CONFLICT(id) DO UPDATE SET folder = 'sent', last_message_at = excluded.last_message_at, snippet = excluded.snippet
         `).bind(tid, subject, ts, body.slice(0, 100)),
         db.prepare("INSERT INTO emails (id, thread_id, from_name, from_email, to_json, subject, body, snippet, timestamp, folder, is_read) VALUES (?, ?, 'Aero User', ?, ?, ?, ?, ?, ?, 'sent', 1)")
           .bind(id, tid, fromEmail || "user@aeromail.dev", JSON.stringify([{ email: to }]), subject, body, body.slice(0, 100), ts)
       ]);
       return ok(c, { id, delivered: !!token });
     } catch (e: any) {
-      console.error("[D1 SEND ERROR]", e);
-      return internalError(c, "Message persistence failed");
+      console.error("[SEND ERROR]", e);
+      return internalError(c, "Message persistence failed: " + e.message);
     }
   });
   app.get('/api/threads/:id', async (c) => {
@@ -250,8 +235,8 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
       }
       return ok(c, { id });
     } catch (e: any) {
-      console.error("[D1 UPDATE ERROR]", e);
-      return internalError(c, "Sync update failed");
+      console.error("[THREAD PATCH ERROR]", e);
+      return internalError(c, "Failed to update thread state: " + e.message);
     }
   });
   app.get('/api/status', async (c) => {
@@ -264,13 +249,18 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
   });
   app.post('/api/simulate/inbound', async (c) => {
     const db = c.env.EMAIL_DB;
-    if (!db) return bad(c, "Simulation requires D1");
+    if (!db) return bad(c, "Simulation requires a D1 database binding.");
     const tid = crypto.randomUUID().slice(0, 8);
     const ts = Date.now();
-    await db.batch([
-      db.prepare("INSERT INTO threads (id, subject, last_message_at, snippet, unread_count, folder) VALUES (?, 'Simulation', ?, 'Test message', 1, 'inbox')").bind(tid, ts),
-      db.prepare("INSERT INTO emails (id, thread_id, from_name, from_email, to_json, subject, body, snippet, timestamp, folder, is_read) VALUES (?, ?, 'Simulator', 'bot@cf.com', '[]', 'Simulation', 'Body', 'Snippet', ?, 'inbox', 0)").bind(crypto.randomUUID(), tid, ts)
-    ]);
-    return ok(c, { threadId: tid });
+    try {
+      await db.batch([
+        db.prepare("INSERT INTO threads (id, subject, last_message_at, snippet, unread_count, folder) VALUES (?, 'Simulation', ?, 'This is a test message generated via settings.', 1, 'inbox')").bind(tid, ts),
+        db.prepare("INSERT INTO emails (id, thread_id, from_name, from_email, to_json, subject, body, snippet, timestamp, folder, is_read) VALUES (?, ?, 'Simulator Bot', 'bot@aeromail.dev', '[]', 'Simulation', 'Hello! This is a test email body.', 'Simulation message body...', ?, 'inbox', 0)").bind(crypto.randomUUID(), tid, ts)
+      ]);
+      return ok(c, { threadId: tid });
+    } catch (e: any) {
+      console.error("[SIMULATE ERROR]", e);
+      return internalError(c, "Simulation failed: " + e.message);
+    }
   });
 }
