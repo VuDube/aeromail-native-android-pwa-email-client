@@ -107,10 +107,13 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
     const id = crypto.randomUUID();
     const ts = Date.now();
     const tid = threadId || id;
+    // Normalize "to" to an array
+    const recipients = Array.isArray(to) ? to : [to];
+    const recipientsJson = JSON.stringify(recipients.map(email => ({ email })));
     try {
       await db.batch([
         db.prepare("INSERT INTO threads (id, subject, last_message_at, snippet, unread_count, folder) VALUES (?, ?, ?, ?, 0, 'sent') ON CONFLICT(id) DO UPDATE SET folder = 'sent', last_message_at = excluded.last_message_at, snippet = excluded.snippet").bind(tid, subject, ts, body.slice(0, 100)),
-        db.prepare("INSERT INTO emails (id, thread_id, from_name, from_email, to_json, subject, body, snippet, timestamp, folder, is_read) VALUES (?, ?, 'Aero User', ?, ?, ?, ?, ?, ?, 'sent', 1)").bind(id, tid, fromEmail || "user@aeromail.dev", JSON.stringify([{ email: to }]), subject, body, body.slice(0, 100), ts)
+        db.prepare("INSERT INTO emails (id, thread_id, from_name, from_email, to_json, subject, body, snippet, timestamp, folder, is_read) VALUES (?, ?, 'Aero User', ?, ?, ?, ?, ?, ?, 'sent', 1)").bind(id, tid, fromEmail || "user@aeromail.dev", recipientsJson, subject, body, body.slice(0, 100), ts)
       ]);
       return ok(c, { id, delivered: !!token });
     } catch (e: any) { return internalError(c, e.message); }

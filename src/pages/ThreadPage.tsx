@@ -87,7 +87,7 @@ export function ThreadPage({ embeddedId, onBack }: ThreadPageProps) {
       return api('/api/emails/send', {
         method: 'POST',
         body: JSON.stringify({
-          to: lastMsg.from.email,
+          to: [lastMsg.from.email],
           subject: `Re: ${thread.subject}`,
           body: body.trim(),
           threadId: thread.id,
@@ -121,7 +121,7 @@ export function ThreadPage({ embeddedId, onBack }: ThreadPageProps) {
               <Button variant="ghost" size="icon" onClick={() => toggleMutation.mutate({ isStarred: !thread?.isStarred })} className="rounded-full">
                 <Star className={cn("h-5 w-5", thread?.isStarred && "fill-yellow-500 text-yellow-500")} />
               </Button>
-              <Button variant="ghost" size="icon" onClick={() => { toggleMutation.mutate({ folder: 'trash' }); onBack?.(); navigate(-1); }} className="rounded-full">
+              <Button variant="ghost" size="icon" onClick={() => { toggleMutation.mutate({ folder: 'trash' }); if(onBack) onBack(); else navigate(-1); }} className="rounded-full">
                 <Trash2 className="h-5 w-5 text-destructive" />
               </Button>
             </div>

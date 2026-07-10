@@ -52,7 +52,7 @@ export function ComposePage() {
   const sendEmailMutation = useMutation({
     mutationFn: (data: any) => api('/api/emails/send', {
       method: 'POST',
-      body: JSON.stringify({ ...data, to: recipients[0] })
+      body: JSON.stringify({ ...data, to: recipients })
     }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['threads'] });
@@ -72,7 +72,7 @@ export function ComposePage() {
   });
   const onSubmit = (data: any) => {
     if (recipients.length === 0) return toast.error("Add at least one recipient");
-    toast.custom((t) => (
+    const toastId = toast.custom((t) => (
       <div className="bg-foreground text-background p-4 rounded-2xl shadow-2xl flex items-center justify-between gap-4 border border-border min-w-[300px]">
         <div className="flex items-center gap-3">
           <div className="h-2 w-2 bg-primary rounded-full animate-pulse" />
@@ -85,7 +85,7 @@ export function ComposePage() {
             if (undoTimerRef.current) {
               clearTimeout(undoTimerRef.current);
               undoTimerRef.current = null;
-              toast.dismiss(t);
+              toast.dismiss(toastId);
               toast.info('Sending cancelled');
             }
           }}

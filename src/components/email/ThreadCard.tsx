@@ -32,6 +32,8 @@ export const ThreadCard = React.memo(forwardRef<HTMLDivElement, ThreadCardProps>
     const ACTION_THRESHOLD = 120;
     const handlers = useSwipeable({
       onSwiping: (e) => {
+        // Prevent accidental triggers during fast scrolling
+        if (Math.abs(e.deltaX) < 10) return;
         if (Math.abs(e.deltaX) >= ACTION_THRESHOLD && 'vibrate' in navigator) navigator.vibrate(5);
         x.set(e.deltaX * 0.5);
       },
@@ -76,7 +78,7 @@ export const ThreadCard = React.memo(forwardRef<HTMLDivElement, ThreadCardProps>
           className={cn(
             "relative z-10 flex items-start gap-3 transition-all duration-200 border-b border-surface-variant/5 cursor-pointer select-none rounded-2xl",
             density === 'compact' ? "p-2" : "p-4",
-            isActive ? "bg-primary-container/40 shadow-sm" : "bg-transparent hover:bg-surface-2",
+            isActive ? "bg-primary-container shadow-sm ring-1 ring-primary/20" : "bg-transparent hover:bg-surface-2",
             !isRead && !isActive && "bg-primary/5 border-l-4 border-l-primary"
           )}
         >
@@ -95,8 +97,8 @@ export const ThreadCard = React.memo(forwardRef<HTMLDivElement, ThreadCardProps>
               <Star className={cn("h-4 w-4", thread.isStarred ? 'fill-yellow-500 text-yellow-500' : 'text-surface-on-variant/20')} />
             </button>
           </div>
-          <Link 
-            to={onSelect ? "#" : `/thread/${thread.id}`} 
+          <Link
+            to={onSelect ? "#" : `/thread/${thread.id}`}
             className="flex-1 min-w-0"
             onClick={(e) => onSelect && e.preventDefault()}
           >
