@@ -75,14 +75,14 @@ export function ComposePage() {
       queryClient.invalidateQueries({ queryKey: ['threads', 'drafts'] });
     }
   });
-  const handleUndoSend = () => {
+  const handleUndoSend = useCallback(() => {
     if (undoTimerRef.current) {
       clearTimeout(undoTimerRef.current);
       undoTimerRef.current = null;
       toast.dismiss('undo-send-toast');
       toast.info('Sending cancelled');
     }
-  };
+  }, []);
   const onSubmit = (data: any) => {
     if (recipients.length === 0) return toast.error("Add at least one recipient");
     toast.custom((t) => (
@@ -113,9 +113,7 @@ export function ComposePage() {
     }
   }, [recipients]);
   const handleClose = () => {
-    if (undoTimerRef.current) {
-      handleUndoSend();
-    }
+    handleUndoSend();
     if (isDirty || recipients.length > 0) {
       setShowDiscardDialog(true);
     } else {
@@ -131,11 +129,11 @@ export function ComposePage() {
             animate={{ y: 0, opacity: 1 }}
             className="bg-surface-1 rounded-m3-xl shadow-2xl border border-surface-variant/20 flex flex-col overflow-hidden min-h-[70vh] relative"
           >
-            {saveDraftMutation.isPending && (
+            {(saveDraftMutation.isPending || sendEmailMutation.isPending) && (
               <div className="absolute inset-0 bg-surface/50 backdrop-blur-[2px] z-[50] flex items-center justify-center">
                 <div className="bg-background p-6 rounded-m3-xl shadow-xl flex items-center gap-4">
                   <Loader2 className="h-6 w-6 animate-spin text-primary" />
-                  <span className="font-bold">Saving draft...</span>
+                  <span className="font-bold">{saveDraftMutation.isPending ? 'Saving draft...' : 'Preparing message...'}</span>
                 </div>
               </div>
             )}

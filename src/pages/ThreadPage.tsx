@@ -32,12 +32,14 @@ export function ThreadPage() {
   });
   const thread = threadData?.thread;
   const messages = thread?.messages || [];
-  // Automated scroll to bottom when messages list changes
+  // Automated scroll to bottom when messages list changes or isReplying toggles
   useEffect(() => {
     if (messages.length > 0) {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      setTimeout(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+      }, 100);
     }
-  }, [messages.length]);
+  }, [messages.length, isReplying]);
   const markAsRead = useMutation({
     mutationFn: (threadId: string) => api(`/api/threads/${threadId}`, {
       method: 'PATCH',
@@ -130,12 +132,12 @@ export function ThreadPage() {
                         <Button variant="ghost" size="icon" onClick={() => setIsReplying(false)} className="rounded-full"><ChevronDown className="h-5 w-5" /></Button>
                       </div>
                       <div className="p-8">
-                        <Textarea 
-                          autoFocus 
-                          value={replyBody} 
-                          onChange={(e) => setReplyBody(e.target.value)} 
-                          placeholder="Type your message..." 
-                          className="min-h-[150px] bg-transparent border-none focus-visible:ring-0 text-base p-0 resize-none shadow-none" 
+                        <Textarea
+                          autoFocus
+                          value={replyBody}
+                          onChange={(e) => setReplyBody(e.target.value)}
+                          placeholder="Type your message..."
+                          className="min-h-[150px] bg-transparent border-none focus-visible:ring-0 text-base p-0 resize-none shadow-none"
                         />
                       </div>
                       <div className="px-8 py-4 border-t flex items-center justify-end bg-surface-2/30 gap-4">
