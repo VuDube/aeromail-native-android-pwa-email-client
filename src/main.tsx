@@ -16,7 +16,7 @@ enableMapSet();
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      retry: false, // Prevent loop on infrastructure failure
+      retry: false,
       refetchOnWindowFocus: false,
       staleTime: 5 * 60 * 1000,
     },
@@ -41,8 +41,29 @@ createRoot(rootElement).render(
     </QueryClientProvider>
   </React.StrictMode>
 );
+// PWA Service Worker Registration
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch(err => console.error('SW registration failed:', err));
+    navigator.serviceWorker.register('/sw.js', { scope: '/' })
+      .then((registration) => {
+        console.log('AeroMail SW registered with scope:', registration.scope);
+        // Handle background sync registration
+        if (registration.sync) {
+          registration.sync.register('send-email').catch(() => {
+            console.warn('Background sync not supported or failed to register');
+          });
+        }
+      })
+      .catch((err) => {
+        console.error('AeroMail SW registration failed:', err);
+      });
+  });
+  // Listen for controller change to reload on new versions
+  let refreshing = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!refreshing) {
+      refreshing = true;
+      window.location.reload();
+    }
   });
 }

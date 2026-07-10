@@ -1,7 +1,7 @@
 {
   "name": "AeroMail",
   "short_name": "AeroMail",
-  "description": "Native Android PWA Email Client on Cloudflare Workers",
+  "description": "High-performance native-like email client powered by Cloudflare Workers",
   "start_url": "/",
   "display": "standalone",
   "orientation": "portrait",
