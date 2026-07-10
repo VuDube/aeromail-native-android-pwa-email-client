@@ -39,7 +39,7 @@ export function ThreadPage() {
   };
   useEffect(() => {
     if (messages.length > 0 || isReplying) {
-      const timer = setTimeout(scrollToBottom, 150);
+      const timer = setTimeout(scrollToBottom, 200);
       return () => clearTimeout(timer);
     }
   }, [messages.length, isReplying]);
@@ -49,11 +49,11 @@ export function ThreadPage() {
       body: JSON.stringify({ isRead: true })
     }),
     onSuccess: (_, threadId) => {
+      queryClient.invalidateQueries({ queryKey: ['threads'] });
       queryClient.setQueryData(['thread', threadId], (old: any) => {
         if (!old?.thread) return old;
         return { ...old, thread: { ...old.thread, unreadCount: 0 } };
       });
-      queryClient.invalidateQueries({ queryKey: ['threads'] });
     }
   });
   useEffect(() => {
@@ -61,7 +61,7 @@ export function ThreadPage() {
       markAttemptedRef.current = id;
       markAsRead.mutate(id);
     }
-  }, [id, thread?.unreadCount, markAsRead, thread]);
+  }, [id, thread?.unreadCount, thread]);
   useEffect(() => {
     if (enabledDomains.length > 0 && selectedFrom === 'user@aeromail.dev') {
       setSelectedFrom(`hello@${enabledDomains[0].name}`);
@@ -86,7 +86,6 @@ export function ThreadPage() {
       toast.success("Reply sent");
       setReplyBody('');
       setIsReplying(false);
-      // Invalidate both current thread and inbox list to ensure snippet/timestamp sync
       queryClient.invalidateQueries({ queryKey: ['thread', id] });
       queryClient.invalidateQueries({ queryKey: ['threads'] });
     },

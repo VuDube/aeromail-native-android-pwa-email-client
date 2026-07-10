@@ -47,9 +47,10 @@ if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/sw.js', { scope: '/' })
       .then((registration) => {
         console.log('AeroMail SW registered with scope:', registration.scope);
-        // Handle background sync registration
-        if (registration.sync) {
-          registration.sync.register('send-email').catch(() => {
+        // Cast to any to bypass missing TS types for the Background Sync API
+        const reg = registration as any;
+        if (reg.sync) {
+          reg.sync.register('send-email').catch(() => {
             console.warn('Background sync not supported or failed to register');
           });
         }
@@ -58,7 +59,6 @@ if ('serviceWorker' in navigator) {
         console.error('AeroMail SW registration failed:', err);
       });
   });
-  // Listen for controller change to reload on new versions
   let refreshing = false;
   navigator.serviceWorker.addEventListener('controllerchange', () => {
     if (!refreshing) {

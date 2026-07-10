@@ -12,7 +12,7 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
   app.get('/api/auth/login', async (c) => {
     const { GMAIL_CLIENT_ID, REDIRECT_URI } = c.env;
     if (!GMAIL_CLIENT_ID || !REDIRECT_URI) {
-      return bad(c, "GMAIL_CLIENT_ID or REDIRECT_URI missing in Cloudflare Secrets. Please check Docs.");
+      return bad(c, "GMAIL_CLIENT_ID or REDIRECT_URI missing in Cloudflare Secrets.");
     }
     const scopes = ['https://www.googleapis.com/auth/gmail.send', 'https://www.googleapis.com/auth/userinfo.email', 'openid'].join(' ');
     const params = new URLSearchParams({
@@ -30,7 +30,7 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
     const { GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, REDIRECT_URI, ENCRYPTION_SECRET, TOKENS } = c.env;
     if (!code) return bad(c, "Authorization code missing");
     if (!GMAIL_CLIENT_ID || !GMAIL_CLIENT_SECRET || !REDIRECT_URI || !ENCRYPTION_SECRET || !TOKENS) {
-      return bad(c, "Server infrastructure secrets are not fully configured. Ensure TOKENS, ENCRYPTION_SECRET, GMAIL_CLIENT_ID, and GMAIL_CLIENT_SECRET are set.");
+      return bad(c, "Server infrastructure secrets are not fully configured.");
     }
     try {
       const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
@@ -177,6 +177,29 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
     } catch (e: any) {
       console.error("[SEND ERROR]", e);
       return internalError(c, "Message persistence failed: " + e.message);
+    }
+  });
+  app.post('/api/drafts', async (c) => {
+    const db = c.env.EMAIL_DB;
+    if (!db) return bad(c, "D1 Database required for drafts");
+    const { subject, body, from, to } = await c.req.json();
+    const id = crypto.randomUUID();
+    const ts = Date.now();
+    try {
+      await db.batch([
+        db.prepare(`
+          INSERT INTO threads (id, subject, last_message_at, snippet, unread_count, folder)
+          VALUES (?, ?, ?, ?, 0, 'drafts')
+        `).bind(id, subject || '(No Subject)', ts, (body || '').slice(0, 100)),
+        db.prepare(`
+          INSERT INTO emails (id, thread_id, from_name, from_email, to_json, subject, body, snippet, timestamp, folder, is_read)
+          VALUES (?, ?, 'Aero User', ?, ?, ?, ?, ?, ?, 'drafts', 1)
+        `).bind(id, id, from, JSON.stringify(to || []), subject || '(No Subject)', body || '', (body || '').slice(0, 100), ts)
+      ]);
+      return ok(c, { id });
+    } catch (e: any) {
+      console.error("[DRAFT ERROR]", e);
+      return internalError(c, "Failed to save draft: " + e.message);
     }
   });
   app.get('/api/threads/:id', async (c) => {
