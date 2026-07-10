@@ -4,7 +4,7 @@ import { useParams, Link } from 'react-router-dom';
 import { api } from '@/lib/api-client';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { EmailThread } from '@shared/types';
-import { Plus, Search, Loader2, RefreshCw, Inbox as InboxIcon, Sparkles, Info, X } from 'lucide-react';
+import { Plus, Search, Loader2, RefreshCw, Inbox as InboxIcon, Sparkles, Info, X, Database } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -21,6 +21,7 @@ export function HomePage() {
   const { data: threads, isLoading, isFetching, error } = useQuery<EmailThread[]>({
     queryKey: ['threads', folder, searchQuery],
     queryFn: () => api<EmailThread[]>(`/api/emails?folder=${folder}${searchQuery ? `&q=${encodeURIComponent(searchQuery)}` : ''}`),
+    retry: 1,
   });
   const toggleMutation = useMutation({
     mutationFn: ({ id, updates }: { id: string, updates: any }) =>
@@ -32,19 +33,29 @@ export function HomePage() {
     toast.success("Inbox refreshed");
   }, [queryClient]);
   if (error) {
+    const isBindingError = (error as any).message?.includes('Database') || (error as any).message?.includes('binding');
     return (
       <AppLayout>
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-40 flex flex-col items-center justify-center gap-6">
-          <div className="h-16 w-16 bg-destructive/10 rounded-full flex items-center justify-center">
-            <Info className="h-8 w-8 text-destructive" />
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-40 flex flex-col items-center justify-center gap-8">
+          <div className="h-20 w-20 bg-destructive/10 rounded-[28px] flex items-center justify-center animate-m3-slide">
+            {isBindingError ? <Database className="h-10 w-10 text-destructive" /> : <Info className="h-10 w-10 text-destructive" />}
           </div>
-          <div className="text-center space-y-2">
-            <h2 className="text-destructive font-black text-2xl tracking-tight">Sync Failure</h2>
-            <p className="text-muted-foreground text-sm max-w-md">{(error as any).message}</p>
+          <div className="text-center space-y-3">
+            <h2 className="text-destructive font-black text-3xl tracking-tighter">Infrastructure Error</h2>
+            <p className="text-muted-foreground text-sm max-w-md mx-auto leading-relaxed">
+              {(error as any).message}
+            </p>
           </div>
-          <Button onClick={() => window.location.reload()} className="rounded-full px-10 h-12 font-bold">
-            Retry Connection
-          </Button>
+          <div className="flex flex-col sm:flex-row gap-4">
+            <Button onClick={() => window.location.reload()} className="rounded-full px-10 h-14 font-black bg-primary shadow-xl shadow-primary/20">
+              Retry Connection
+            </Button>
+            {isBindingError && (
+              <Button asChild variant="outline" className="rounded-full px-10 h-14 font-black">
+                <Link to="/settings">Check Infrastructure</Link>
+              </Button>
+            )}
+          </div>
         </div>
       </AppLayout>
     );
@@ -106,7 +117,7 @@ export function HomePage() {
             {isLoading ? (
               <div className="py-40 flex flex-col items-center gap-6">
                 <Loader2 className="h-10 w-10 animate-spin text-primary/30" />
-                <p className="text-[10px] font-black uppercase tracking-[0.3em] opacity-40">Fetching Messages...</p>
+                <p className="text-[10px] font-black uppercase tracking-[0.3em] opacity-40">Syncing with Edge...</p>
               </div>
             ) : threads && threads.length > 0 ? (
               <AnimatePresence mode="popLayout">
@@ -118,7 +129,7 @@ export function HomePage() {
                     density={density}
                     onArchive={(id) => {
                       toggleMutation.mutate({ id, updates: { folder: 'trash' } });
-                      toast.info("Thread archived");
+                      toast.info("Thread moved to Trash");
                     }}
                     onToggleRead={(id, cur) => {
                       toggleMutation.mutate({ id, updates: { isRead: !cur } });
@@ -130,7 +141,7 @@ export function HomePage() {
                 ))}
               </AnimatePresence>
             ) : (
-              <div className="py-32 flex flex-col items-center text-center gap-8 bg-surface-1/40 rounded-[48px] border-2 border-dashed border-surface-variant/5 mx-auto max-w-lg">
+              <div className="py-32 flex flex-col items-center text-center gap-8 bg-surface-1/40 rounded-[48px] border-2 border-dashed border-surface-variant/5 mx-auto max-w-lg animate-fade-in-up">
                 <div className="relative">
                   <div className="h-24 w-24 bg-primary-container/10 rounded-full flex items-center justify-center">
                     <InboxIcon className="h-12 w-12 text-primary/20" />
@@ -142,7 +153,7 @@ export function HomePage() {
                   <p className="text-surface-on-variant/60 text-sm">No conversations found in {folder}.</p>
                   {searchQuery && (
                     <Button variant="link" onClick={() => setSearchQuery('')} className="text-primary font-bold">
-                      Clear filter
+                      Clear search filter
                     </Button>
                   )}
                 </div>

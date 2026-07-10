@@ -61,7 +61,7 @@ export function ThreadPage() {
       markAttemptedRef.current = id;
       markAsRead.mutate(id);
     }
-  }, [id, thread?.unreadCount, thread]);
+  }, [id, thread?.unreadCount, thread, markAsRead]);
   useEffect(() => {
     if (enabledDomains.length > 0 && selectedFrom === 'user@aeromail.dev') {
       setSelectedFrom(`hello@${enabledDomains[0].name}`);
@@ -92,7 +92,25 @@ export function ThreadPage() {
     onError: (err: any) => toast.error(err.message || "Failed to send")
   });
   if (isLoading) return <AppLayout><div className="flex h-full items-center justify-center py-40"><Loader2 className="animate-spin text-primary/20 h-10 w-10" /></div></AppLayout>;
-  if (error || !thread) return <AppLayout><div className="max-w-7xl mx-auto px-4 py-20 text-center"><h2 className="text-xl font-bold mb-4">Conversation not found</h2><Button onClick={() => navigate('/')}>Return to Inbox</Button></div></AppLayout>;
+  if (error || !thread) {
+    const isNotFoundError = (error as any)?.message?.toLowerCase().includes('not found') || !thread;
+    return (
+      <AppLayout>
+        <div className="max-w-7xl mx-auto px-4 py-20 text-center flex flex-col items-center gap-6">
+          <div className="h-16 w-16 bg-muted rounded-full flex items-center justify-center text-muted-foreground">
+            <ArrowLeft className="h-8 w-8" />
+          </div>
+          <div className="space-y-2">
+            <h2 className="text-2xl font-black tracking-tight">{isNotFoundError ? "Message not found" : "Connection Error"}</h2>
+            <p className="text-muted-foreground text-sm max-w-sm">
+              {isNotFoundError ? "This conversation might have been deleted or moved." : (error as any)?.message}
+            </p>
+          </div>
+          <Button onClick={() => navigate('/')} className="rounded-full font-bold px-8">Return to Inbox</Button>
+        </div>
+      </AppLayout>
+    );
+  }
   return (
     <AppLayout>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">

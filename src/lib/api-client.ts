@@ -30,12 +30,15 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
       const text = rawText.toUpperCase();
       // Handle known Cloudflare environment errors specifically
       if (text.includes('D1_') || text.includes('DATABASE') || res.status === 500) {
-        throw new Error("AeroMail Database Error: The D1 database binding 'EMAIL_DB' is missing or not initialized. Check your Cloudflare dashboard.");
+        throw new Error("AeroMail Database Error: The D1 database binding 'EMAIL_DB' is missing or uninitialized. Ensure you have run your migrations and bound the D1 database in wrangler.jsonc.");
       }
       if (text.includes('KV_') || text.includes('NAMESPACE')) {
-        throw new Error("AeroMail Tokens Error: The 'TOKENS' KV namespace is not bound. Verify your worker settings.");
+        throw new Error("AeroMail Tokens Error: The 'TOKENS' KV namespace is not bound to the worker. Please check your Cloudflare dashboard settings.");
       }
-      throw new Error(`Server Error (${res.status}): Invalid response from ${path}`);
+      if (res.status === 404) {
+        throw new Error(`Endpoint not found: ${path}`);
+      }
+      throw new Error(`Server Error (${res.status}): Invalid response from AeroMail Edge Network.`);
     }
     if (!res.ok || !json.success) {
       const errorMessage = json.error || `Request failed (${res.status})`;

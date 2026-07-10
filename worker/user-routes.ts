@@ -1,11 +1,10 @@
 import { Hono } from "hono";
-import { ok, bad, internalError, notFound, Env, getGmailAccessToken, encrypt, decrypt, fetchCloudflare } from './core-utils';
-import { MOCK_USERS, MOCK_EMAILS } from "../shared/mock-data";
+import { ok, bad, internalError, notFound, Env, getGmailAccessToken, encrypt, fetchCloudflare } from './core-utils';
 import { DomainInfo } from "../shared/types";
 export function userRoutes(app: Hono<{ Bindings: Env }>) {
   // --- AUTH ENDPOINTS ---
   app.get('/api/auth/status', async (c) => {
-    if (!c.env.TOKENS) return ok(c, { connected: false, demo: true });
+    if (!c.env.TOKENS) return internalError(c, "Tokens KV namespace not bound.");
     const token = await c.env.TOKENS.get("gmail_refresh_token");
     return ok(c, { connected: !!token });
   });
@@ -63,7 +62,7 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
   // --- DOMAIN MANAGEMENT ---
   app.get('/api/domains', async (c) => {
     const db = c.env.EMAIL_DB;
-    if (!db) return ok(c, []);
+    if (!db) return internalError(c, "D1 Database 'EMAIL_DB' binding is required.");
     try {
       let apiZones: any[] = [];
       if (c.env.CF_API_TOKEN) {
@@ -91,7 +90,7 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
   });
   app.post('/api/domains/toggle', async (c) => {
     const db = c.env.EMAIL_DB;
-    if (!db) return bad(c, "D1 Database required for domain identity storage");
+    if (!db) return internalError(c, "D1 Database binding required for domain storage.");
     const { domainId, domainName, enabled } = await c.req.json();
     if (!domainId || !domainName) return bad(c, "Missing parameters");
     try {
@@ -112,25 +111,9 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
   // --- THREAD & EMAIL ENDPOINTS ---
   app.get('/api/emails', async (c) => {
     const db = c.env.EMAIL_DB;
+    if (!db) return internalError(c, "D1 Database 'EMAIL_DB' binding is required.");
     const folder = c.req.query('folder') || 'inbox';
     const searchQuery = c.req.query('q');
-    if (!db) {
-      let mock = MOCK_EMAILS.filter(e => folder === 'starred' ? e.isStarred : e.folder === folder);
-      if (searchQuery) {
-        const q = searchQuery.toLowerCase();
-        mock = mock.filter(e => e.subject.toLowerCase().includes(q) || e.body.toLowerCase().includes(q));
-      }
-      return ok(c, mock.map(e => ({
-        id: e.threadId,
-        lastMessageAt: e.timestamp,
-        subject: e.subject,
-        snippet: e.snippet,
-        unreadCount: e.isRead ? 0 : 1,
-        isStarred: e.isStarred,
-        folder: e.folder as any,
-        participantNames: [e.from.name]
-      })));
-    }
     let query: string;
     let params: any[] = [];
     if (searchQuery) {
@@ -157,8 +140,8 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
   });
   app.post('/api/emails/send', async (c) => {
     const db = c.env.EMAIL_DB;
+    if (!db) return internalError(c, "D1 Database 'EMAIL_DB' binding is required to send messages.");
     const { to, subject, body, fromEmail, threadId } = await c.req.json();
-    if (!db) return bad(c, "Simulation Mode: Bind a D1 database to 'EMAIL_DB' to send messages.");
     const token = await getGmailAccessToken(c.env);
     const id = crypto.randomUUID();
     const ts = Date.now();
@@ -181,7 +164,7 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
   });
   app.post('/api/drafts', async (c) => {
     const db = c.env.EMAIL_DB;
-    if (!db) return bad(c, "D1 Database required for drafts");
+    if (!db) return internalError(c, "D1 Database 'EMAIL_DB' binding is required for drafts.");
     const { subject, body, from, to } = await c.req.json();
     const id = crypto.randomUUID();
     const ts = Date.now();
@@ -205,10 +188,7 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
   app.get('/api/threads/:id', async (c) => {
     const db = c.env.EMAIL_DB;
     const id = c.req.param('id');
-    if (!db) {
-      const e = MOCK_EMAILS.find(x => x.threadId === id) || MOCK_EMAILS[0];
-      return ok(c, { thread: { ...e, messages: [e] } });
-    }
+    if (!db) return internalError(c, "D1 Database 'EMAIL_DB' binding is required.");
     const thread = await db.prepare("SELECT * FROM threads WHERE id = ?").bind(id).first() as any;
     if (!thread) return notFound(c);
     const messages = await db.prepare("SELECT * FROM emails WHERE thread_id = ? ORDER BY timestamp ASC").bind(id).all();
@@ -230,7 +210,7 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
     const db = c.env.EMAIL_DB;
     const id = c.req.param('id');
     const body = await c.req.json();
-    if (!db) return ok(c, { id });
+    if (!db) return internalError(c, "D1 Database 'EMAIL_DB' binding is required.");
     try {
       const statements = [];
       const threadUpdates: string[] = [];
@@ -264,15 +244,14 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
   });
   app.get('/api/status', async (c) => {
     return ok(c, {
-      gmail_ready: !!(c.env.GMAIL_CLIENT_ID && c.env.TOKENS),
+      gmail_ready: !!(c.env.GMAIL_CLIENT_ID && c.env.TOKENS && c.env.ENCRYPTION_SECRET),
       cf_ready: !!c.env.CF_API_TOKEN,
-      db_ready: !!c.env.EMAIL_DB,
-      demo_mode: !c.env.EMAIL_DB
+      db_ready: !!c.env.EMAIL_DB
     });
   });
   app.post('/api/simulate/inbound', async (c) => {
     const db = c.env.EMAIL_DB;
-    if (!db) return bad(c, "Simulation requires a D1 database binding.");
+    if (!db) return internalError(c, "Simulation requires a D1 database binding.");
     const tid = crypto.randomUUID().slice(0, 8);
     const ts = Date.now();
     try {
