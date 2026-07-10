@@ -125,6 +125,11 @@ function runSetupCommands() {
         "bun",
         "add",
         "@tanstack/react-query"
+    ],
+    [
+        "bun",
+        "add",
+        "postal-mime@^2.0.0"
     ]
 ];
     const ALLOWED = new Set(['npm', 'yarn', 'pnpm', 'bun']);
