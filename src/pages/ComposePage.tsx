@@ -44,6 +44,14 @@ export function ComposePage() {
       setValue('from', `hello@${enabledDomains[0].name}`);
     }
   }, [enabledDomains, setValue, selectedFrom]);
+  // Ensure timer is cleared on unmount
+  useEffect(() => {
+    return () => {
+      if (undoTimerRef.current) {
+        clearTimeout(undoTimerRef.current);
+      }
+    };
+  }, []);
   const sendEmailMutation = useMutation({
     mutationFn: (data: any) => api('/api/emails/send', {
       method: 'POST',
@@ -52,6 +60,9 @@ export function ComposePage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['threads'] });
       navigate('/');
+    },
+    onError: (err: any) => {
+      toast.error(err.message || "Sending failed");
     }
   });
   const saveDraftMutation = useMutation({
@@ -80,9 +91,9 @@ export function ComposePage() {
           <div className="h-2 w-2 bg-primary rounded-full animate-pulse" />
           <span className="text-sm font-bold">Sending in 3s...</span>
         </div>
-        <Button 
-          variant="ghost" 
-          size="sm" 
+        <Button
+          variant="ghost"
+          size="sm"
           onClick={() => { handleUndoSend(); toast.dismiss(t); }}
           className="text-primary hover:bg-primary/10 font-black gap-2"
         >
@@ -102,6 +113,9 @@ export function ComposePage() {
     }
   }, [recipients]);
   const handleClose = () => {
+    if (undoTimerRef.current) {
+      handleUndoSend();
+    }
     if (isDirty || recipients.length > 0) {
       setShowDiscardDialog(true);
     } else {
@@ -112,11 +126,19 @@ export function ComposePage() {
     <AppLayout>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="py-8 md:py-10 lg:py-12">
-          <motion.div 
-            initial={{ y: 20, opacity: 0 }} 
-            animate={{ y: 0, opacity: 1 }} 
-            className="bg-surface-1 rounded-m3-xl shadow-2xl border border-surface-variant/20 flex flex-col overflow-hidden min-h-[70vh]"
+          <motion.div
+            initial={{ y: 20, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            className="bg-surface-1 rounded-m3-xl shadow-2xl border border-surface-variant/20 flex flex-col overflow-hidden min-h-[70vh] relative"
           >
+            {saveDraftMutation.isPending && (
+              <div className="absolute inset-0 bg-surface/50 backdrop-blur-[2px] z-[50] flex items-center justify-center">
+                <div className="bg-background p-6 rounded-m3-xl shadow-xl flex items-center gap-4">
+                  <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                  <span className="font-bold">Saving draft...</span>
+                </div>
+              </div>
+            )}
             <header className="px-8 py-6 border-b flex items-center justify-between bg-surface-2/30">
               <div className="flex items-center gap-6">
                 <Button variant="ghost" size="icon" onClick={handleClose} className="rounded-full">
@@ -125,18 +147,18 @@ export function ComposePage() {
                 <h2 className="text-2xl font-black tracking-tight">Compose</h2>
               </div>
               <div className="flex items-center gap-3">
-                <Button 
-                  variant="ghost" 
+                <Button
+                  variant="ghost"
                   onClick={() => saveDraftMutation.mutate({ subject: currentSubject, body: currentBody, from: selectedFrom })}
-                  disabled={saveDraftMutation.isPending}
+                  disabled={saveDraftMutation.isPending || sendEmailMutation.isPending}
                   className="rounded-full font-bold gap-2"
                 >
-                  {saveDraftMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                  <Save className="h-4 w-4" />
                   <span className="hidden sm:inline">Save Draft</span>
                 </Button>
-                <Button 
-                  onClick={handleSubmit(onSubmit)} 
-                  disabled={sendEmailMutation.isPending} 
+                <Button
+                  onClick={handleSubmit(onSubmit)}
+                  disabled={sendEmailMutation.isPending || saveDraftMutation.isPending}
                   className="rounded-full bg-primary px-10 h-12 font-bold shadow-lg shadow-primary/20 gap-3"
                 >
                   {sendEmailMutation.isPending ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />} Send
@@ -162,7 +184,7 @@ export function ComposePage() {
                 <span className="text-[11px] font-black text-surface-on-variant uppercase tracking-[0.2em] w-12">To</span>
                 <AnimatePresence>
                   {recipients.map(r => (
-                    <motion.span 
+                    <motion.span
                       key={r}
                       initial={{ scale: 0.8, opacity: 0 }}
                       animate={{ scale: 1, opacity: 1 }}
@@ -173,12 +195,12 @@ export function ComposePage() {
                     </motion.span>
                   ))}
                 </AnimatePresence>
-                <Input 
-                  value={recipientInput} 
-                  onChange={(e) => setRecipientInput(e.target.value)} 
-                  onKeyDown={(e) => (e.key === 'Enter' || e.key === ',') && (e.preventDefault(), addRecipient(recipientInput))} 
-                  placeholder="Recipient email..." 
-                  className="flex-1 bg-transparent border-none shadow-none focus-visible:ring-0 text-base h-10 p-0 font-medium" 
+                <Input
+                  value={recipientInput}
+                  onChange={(e) => setRecipientInput(e.target.value)}
+                  onKeyDown={(e) => (e.key === 'Enter' || e.key === ',') && (e.preventDefault(), addRecipient(recipientInput))}
+                  placeholder="Recipient email..."
+                  className="flex-1 bg-transparent border-none shadow-none focus-visible:ring-0 text-base h-10 p-0 font-medium"
                 />
               </div>
               <div className="flex items-center border-b border-surface-variant/10 py-4">
@@ -202,8 +224,8 @@ export function ComposePage() {
           </AlertDialogHeader>
           <AlertDialogFooter className="gap-3">
             <AlertDialogCancel className="rounded-full font-bold">Keep Editing</AlertDialogCancel>
-            <AlertDialogAction 
-              onClick={() => navigate(-1)} 
+            <AlertDialogAction
+              onClick={() => navigate(-1)}
               className="rounded-full bg-destructive text-destructive-foreground hover:bg-destructive/90 font-bold gap-2"
             >
               <Trash2 className="h-4 w-4" /> Discard

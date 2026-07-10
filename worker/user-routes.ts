@@ -130,8 +130,8 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
     let params: any[] = [];
     if (searchQuery) {
       query = `
-        SELECT t.*, (SELECT GROUP_CONCAT(from_name, ', ') FROM (SELECT DISTINCT from_name FROM emails WHERE thread_id = t.id)) as participantNames 
-        FROM threads t 
+        SELECT t.*, (SELECT GROUP_CONCAT(from_name, ', ') FROM (SELECT DISTINCT from_name FROM emails WHERE thread_id = t.id)) as participantNames
+        FROM threads t
         WHERE (subject LIKE ? OR snippet LIKE ?)
         ORDER BY last_message_at DESC
       `;
@@ -181,7 +181,7 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
     try {
       await db.batch([
         db.prepare(`
-          INSERT INTO threads (id, subject, last_message_at, snippet, unread_count, folder) 
+          INSERT INTO threads (id, subject, last_message_at, snippet, unread_count, folder)
           VALUES (?, ?, ?, ?, 0, 'sent')
           ON CONFLICT(id) DO UPDATE SET folder = 'sent', last_message_at = excluded.last_message_at
         `).bind(tid, subject, ts, body.slice(0, 100)),
@@ -223,16 +223,44 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
     const id = c.req.param('id');
     const body = await c.req.json();
     if (!db) return ok(c, { id });
-    const updates: string[] = [];
-    const params: any[] = [];
-    if (body.isRead !== undefined) { updates.push("unread_count = ?"); params.push(body.isRead ? 0 : 1); }
-    if (body.isStarred !== undefined) { updates.push("is_starred = ?"); params.push(body.isStarred ? 1 : 0); }
-    if (body.folder !== undefined) { updates.push("folder = ?"); params.push(body.folder); }
-    if (updates.length > 0) {
-      params.push(id);
-      await db.prepare(`UPDATE threads SET ${updates.join(', ')} WHERE id = ?`).bind(...params).run();
+    try {
+      const statements = [];
+      // Build Thread Update
+      const threadUpdates: string[] = [];
+      const threadParams: any[] = [];
+      if (body.isRead !== undefined) { 
+        threadUpdates.push("unread_count = ?"); 
+        threadParams.push(body.isRead ? 0 : 1); 
+      }
+      if (body.isStarred !== undefined) { 
+        threadUpdates.push("is_starred = ?"); 
+        threadParams.push(body.isStarred ? 1 : 0); 
+      }
+      if (body.folder !== undefined) { 
+        threadUpdates.push("folder = ?"); 
+        threadParams.push(body.folder); 
+      }
+      if (threadUpdates.length > 0) {
+        statements.push(db.prepare(`UPDATE threads SET ${threadUpdates.join(', ')} WHERE id = ?`).bind(...threadParams, id));
+      }
+      // Sync Child Emails
+      if (body.isRead !== undefined) {
+        statements.push(db.prepare("UPDATE emails SET is_read = ? WHERE thread_id = ?").bind(body.isRead ? 1 : 0, id));
+      }
+      if (body.isStarred !== undefined) {
+        statements.push(db.prepare("UPDATE emails SET is_starred = ? WHERE thread_id = ?").bind(body.isStarred ? 1 : 0, id));
+      }
+      if (body.folder !== undefined) {
+        statements.push(db.prepare("UPDATE emails SET folder = ? WHERE thread_id = ?").bind(body.folder, id));
+      }
+      if (statements.length > 0) {
+        await db.batch(statements);
+      }
+      return ok(c, { id });
+    } catch (e: any) {
+      console.error("[D1 UPDATE ERROR]", e);
+      return internalError(c, "Sync update failed");
     }
-    return ok(c, { id });
   });
   app.get('/api/status', async (c) => {
     return ok(c, {

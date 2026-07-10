@@ -19,6 +19,7 @@ export function ThreadPage() {
   const [isReplying, setIsReplying] = useState(false);
   const [selectedFrom, setSelectedFrom] = useState('user@aeromail.dev');
   const markAttemptedRef = useRef<string | null>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
   const { data: domains } = useQuery({
     queryKey: ['domains'],
     queryFn: () => api<DomainInfo[]>('/api/domains')
@@ -31,6 +32,12 @@ export function ThreadPage() {
   });
   const thread = threadData?.thread;
   const messages = thread?.messages || [];
+  // Automated scroll to bottom when messages list changes
+  useEffect(() => {
+    if (messages.length > 0) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [messages.length]);
   const markAsRead = useMutation({
     mutationFn: (threadId: string) => api(`/api/threads/${threadId}`, {
       method: 'PATCH',
@@ -49,7 +56,7 @@ export function ThreadPage() {
       markAttemptedRef.current = id;
       markAsRead.mutate(id);
     }
-  }, [id, thread?.unreadCount, markAsRead, thread]); // Fixed missing 'thread' dependency
+  }, [id, thread?.unreadCount, markAsRead, thread]);
   useEffect(() => {
     if (enabledDomains.length > 0 && selectedFrom === 'user@aeromail.dev') {
       setSelectedFrom(`hello@${enabledDomains[0].name}`);
@@ -100,6 +107,7 @@ export function ThreadPage() {
                   isSameSenderAsPrev={idx > 0 && messages[idx-1].from.email === msg.from.email}
                 />
               ))}
+              <div ref={messagesEndRef} className="h-px w-full" />
             </div>
             <div className="fixed bottom-0 left-0 lg:left-72 right-0 p-6 z-[40] bg-gradient-to-t from-background via-background/95 to-transparent pt-20">
               <div className="max-w-4xl mx-auto px-4 md:px-8">
@@ -122,7 +130,13 @@ export function ThreadPage() {
                         <Button variant="ghost" size="icon" onClick={() => setIsReplying(false)} className="rounded-full"><ChevronDown className="h-5 w-5" /></Button>
                       </div>
                       <div className="p-8">
-                        <Textarea autoFocus value={replyBody} onChange={(e) => setReplyBody(e.target.value)} placeholder="Type your message..." className="min-h-[150px] bg-transparent border-none focus-visible:ring-0 text-base p-0 resize-none shadow-none" />
+                        <Textarea 
+                          autoFocus 
+                          value={replyBody} 
+                          onChange={(e) => setReplyBody(e.target.value)} 
+                          placeholder="Type your message..." 
+                          className="min-h-[150px] bg-transparent border-none focus-visible:ring-0 text-base p-0 resize-none shadow-none" 
+                        />
                       </div>
                       <div className="px-8 py-4 border-t flex items-center justify-end bg-surface-2/30 gap-4">
                         <Button variant="ghost" onClick={() => setIsReplying(false)} className="rounded-full font-bold">Discard</Button>
