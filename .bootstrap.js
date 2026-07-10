@@ -135,6 +135,11 @@ function runSetupCommands() {
         "bun",
         "add",
         "react-resizable-panels"
+    ],
+    [
+        "bun",
+        "add",
+        "react-resizable-panels@^3.0.3"
     ]
 ];
     const ALLOWED = new Set(['npm', 'yarn', 'pnpm', 'bun']);
