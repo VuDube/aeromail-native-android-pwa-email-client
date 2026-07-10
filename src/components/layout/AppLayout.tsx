@@ -60,7 +60,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
       </div>
       {!isMobile && (
         <aside className={cn(
-          "flex flex-col border-r bg-surface-1 transition-all duration-300 relative z-30",
+          "flex flex-col border-r bg-surface-1 transition-all duration-300 relative z-30 shrink-0",
           density === 'compact' ? "w-20 lg:w-64" : "w-24 lg:w-72"
         )}>
           <div className="px-6 py-8 flex items-center gap-3">
@@ -121,7 +121,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           </TooltipProvider>
         </aside>
       )}
-      <main className="flex-1 flex flex-col min-w-0 relative bg-background">
+      <main className="flex-1 flex flex-col min-w-0 relative bg-background h-full overflow-hidden">
         {isMobile && (
           <header className="h-16 border-b bg-surface/80 backdrop-blur-xl flex items-center px-4 gap-4 shrink-0 z-30">
             {pathname.startsWith('/thread/') || pathname === '/compose' ? (
@@ -137,19 +137,8 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
             </div>
           </header>
         )}
-        <div id="main-scroll-area" className="flex-1 overflow-y-auto overflow-x-hidden relative custom-scrollbar">
-          <AnimatePresence mode="popLayout" initial={false}>
-            <motion.div
-              key={pathname}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              transition={{ duration: 0.2, ease: [0.4, 0, 0.2, 1] }}
-              className="min-h-full"
-            >
-              {children}
-            </motion.div>
-          </AnimatePresence>
+        <div id="main-scroll-area" className="flex-1 overflow-y-auto overflow-x-hidden relative custom-scrollbar h-full">
+          {children}
           <AnimatePresence>
             {showScrollTop && (
               <motion.button

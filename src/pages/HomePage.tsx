@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useParams, Link } from 'react-router-dom';
 import { api } from '@/lib/api-client';
@@ -12,11 +12,16 @@ import { toast } from 'sonner';
 import { useDensity } from '@/hooks/use-density';
 import { ThreadCard } from '@/components/email/ThreadCard';
 import { cn } from '@/lib/utils';
+import { useIsMobile } from '@/hooks/use-mobile';
+import { ThreadPage } from '@/pages/ThreadPage';
+import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 export function HomePage() {
   const queryClient = useQueryClient();
   const { folder = 'inbox' } = useParams<{ folder: string }>();
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearchFocused, setIsSearchFocused] = useState(false);
+  const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
+  const isMobile = useIsMobile();
   const { density } = useDensity();
   const { data: threads, isLoading, isFetching, error } = useQuery<EmailThread[]>({
     queryKey: ['threads', folder, searchQuery],
@@ -32,142 +37,139 @@ export function HomePage() {
     queryClient?.invalidateQueries({ queryKey: ['threads'] });
     toast.success("Inbox refreshed");
   }, [queryClient]);
+  const emailListContent = (
+    <div className="h-full flex flex-col">
+      <header className="p-4 lg:p-8 space-y-6 shrink-0 bg-background/80 backdrop-blur-md sticky top-0 z-20">
+        <div className="flex items-center justify-between">
+          <h1 className="text-3xl lg:text-4xl font-black tracking-tighter capitalize">{folder}</h1>
+          <div className="flex items-center gap-3">
+            {isFetching && <Loader2 className="h-4 w-4 animate-spin text-primary/50" />}
+            <Button variant="ghost" size="icon" onClick={handleRefresh} className="rounded-full">
+              <RefreshCw className={cn("h-4 w-4", isFetching && "animate-spin-slow")} />
+            </Button>
+          </div>
+        </div>
+        <div className="relative group w-full">
+          <motion.div
+            animate={{
+              scale: isSearchFocused ? 1.01 : 1,
+              boxShadow: isSearchFocused ? '0 10px 25px rgba(0,0,0,0.05)' : '0 2px 4px rgba(0,0,0,0.01)'
+            }}
+            className={cn(
+              "relative flex items-center bg-surface-2 rounded-2xl transition-all border-2 border-transparent",
+              isSearchFocused && "bg-background border-primary/20"
+            )}
+          >
+            <Search className={cn(
+              "absolute left-4 h-4 w-4 transition-colors",
+              isSearchFocused ? "text-primary" : "text-surface-on-variant/40"
+            )} />
+            <Input
+              value={searchQuery}
+              onFocus={() => setIsSearchFocused(true)}
+              onBlur={() => setIsSearchFocused(false)}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search mail..."
+              className="w-full h-12 pl-12 pr-10 rounded-2xl bg-transparent border-none focus-visible:ring-0 text-sm font-bold"
+            />
+            {searchQuery && (
+              <button onClick={() => setSearchQuery('')} className="absolute right-3 p-1 hover:bg-surface-variant/20 rounded-full">
+                <X className="h-3 w-3" />
+              </button>
+            )}
+          </motion.div>
+        </div>
+      </header>
+      <section className="flex-1 overflow-y-auto px-2 lg:px-4 pb-24 custom-scrollbar">
+        {isLoading ? (
+          <div className="py-20 flex flex-col items-center gap-4">
+            <Loader2 className="h-8 w-8 animate-spin text-primary/20" />
+            <p className="text-[10px] font-black uppercase tracking-widest opacity-30">Syncing...</p>
+          </div>
+        ) : threads && threads.length > 0 ? (
+          <div className="space-y-px">
+            {threads.map((thread, idx) => (
+              <ThreadCard
+                key={thread.id}
+                thread={thread}
+                idx={idx}
+                density={density}
+                isActive={selectedThreadId === thread.id}
+                onSelect={(id) => isMobile ? null : setSelectedThreadId(id)}
+                onArchive={(id) => {
+                  toggleMutation.mutate({ id, updates: { folder: 'trash' } });
+                  if (selectedThreadId === id) setSelectedThreadId(null);
+                  toast.info("Moved to Trash");
+                }}
+                onToggleRead={(id, cur) => toggleMutation.mutate({ id, updates: { isRead: !cur } })}
+                onToggleStar={(id, cur) => toggleMutation.mutate({ id, updates: { isStarred: !cur } })}
+              />
+            ))}
+          </div>
+        ) : (
+          <div className="py-20 flex flex-col items-center text-center gap-6 opacity-40">
+            <InboxIcon className="h-10 w-10" />
+            <p className="text-sm font-bold tracking-tight">No messages found</p>
+          </div>
+        )}
+      </section>
+    </div>
+  );
   if (error) {
-    const isBindingError = (error as any).message?.includes('Database') || (error as any).message?.includes('binding');
     return (
       <AppLayout>
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-40 flex flex-col items-center justify-center gap-8">
-          <div className="h-20 w-20 bg-destructive/10 rounded-[28px] flex items-center justify-center animate-m3-slide">
-            {isBindingError ? <Database className="h-10 w-10 text-destructive" /> : <Info className="h-10 w-10 text-destructive" />}
-          </div>
-          <div className="text-center space-y-3">
-            <h2 className="text-destructive font-black text-3xl tracking-tighter">Infrastructure Error</h2>
-            <p className="text-muted-foreground text-sm max-w-md mx-auto leading-relaxed">
-              {(error as any).message}
-            </p>
-          </div>
-          <div className="flex flex-col sm:flex-row gap-4">
-            <Button onClick={() => window.location.reload()} className="rounded-full px-10 h-14 font-black bg-primary shadow-xl shadow-primary/20">
-              Retry Connection
-            </Button>
-            {isBindingError && (
-              <Button asChild variant="outline" className="rounded-full px-10 h-14 font-black">
-                <Link to="/settings">Check Infrastructure</Link>
-              </Button>
-            )}
-          </div>
+        <div className="max-w-7xl mx-auto px-4 py-40 flex flex-col items-center justify-center gap-8">
+          <Database className="h-12 w-12 text-destructive" />
+          <h2 className="text-3xl font-black tracking-tighter">Connection Error</h2>
+          <p className="text-muted-foreground text-sm max-w-xs text-center">{(error as any).message}</p>
+          <Button onClick={() => window.location.reload()} className="rounded-full px-10 h-14 font-black">Retry</Button>
         </div>
       </AppLayout>
     );
   }
   return (
     <AppLayout>
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="py-8 md:py-10 lg:py-12">
-          <header className="space-y-10 mb-10">
-            <div className="flex items-center justify-between">
-              <h1 className="text-4xl md:text-5xl font-black tracking-tighter capitalize">{folder}</h1>
-              <div className="flex items-center gap-3">
-                {isFetching && <Loader2 className="h-5 w-5 animate-spin text-primary opacity-50" />}
-                <Button variant="ghost" size="icon" onClick={handleRefresh} className="rounded-full">
-                  <RefreshCw className={cn("h-5 w-5", isFetching && "animate-spin-slow")} />
-                </Button>
-              </div>
-            </div>
-            <div className="relative group max-w-2xl mx-auto w-full">
-              <motion.div
-                animate={{
-                  scale: isSearchFocused ? 1.02 : 1,
-                  boxShadow: isSearchFocused ? '0 12px 32px rgba(0,0,0,0.08)' : '0 2px 4px rgba(0,0,0,0.01)'
-                }}
-                className={cn(
-                  "relative flex items-center bg-surface-2 rounded-2xl transition-all border-2 border-transparent",
-                  isSearchFocused && "bg-background border-primary/30"
-                )}
-              >
-                <Search className={cn(
-                  "absolute left-5 h-5 w-5 transition-colors",
-                  isSearchFocused ? "text-primary" : "text-surface-on-variant/40"
-                )} />
-                <Input
-                  value={searchQuery}
-                  onFocus={() => setIsSearchFocused(true)}
-                  onBlur={() => setIsSearchFocused(false)}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search your mail..."
-                  className="w-full h-14 pl-14 pr-12 rounded-2xl bg-transparent border-none focus-visible:ring-0 text-base font-bold"
-                />
-                <AnimatePresence>
-                  {searchQuery && (
-                    <motion.button
-                      initial={{ opacity: 0, scale: 0.8 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      exit={{ opacity: 0, scale: 0.8 }}
-                      onClick={() => setSearchQuery('')}
-                      className="absolute right-4 h-8 w-8 rounded-full flex items-center justify-center hover:bg-surface-variant/20"
-                    >
-                      <X className="h-4 w-4" />
-                    </motion.button>
-                  )}
-                </AnimatePresence>
-              </motion.div>
-            </div>
-          </header>
-          <section className="space-y-px pb-32">
-            {isLoading ? (
-              <div className="py-40 flex flex-col items-center gap-6">
-                <Loader2 className="h-10 w-10 animate-spin text-primary/30" />
-                <p className="text-[10px] font-black uppercase tracking-[0.3em] opacity-40">Syncing with Edge...</p>
-              </div>
-            ) : threads && threads.length > 0 ? (
-              <AnimatePresence mode="popLayout">
-                {threads.map((thread, idx) => (
-                  <ThreadCard
-                    key={thread.id}
-                    thread={thread}
-                    idx={idx}
-                    density={density}
-                    onArchive={(id) => {
-                      toggleMutation.mutate({ id, updates: { folder: 'trash' } });
-                      toast.info("Thread moved to Trash");
-                    }}
-                    onToggleRead={(id, cur) => {
-                      toggleMutation.mutate({ id, updates: { isRead: !cur } });
-                    }}
-                    onToggleStar={(id, cur) => {
-                      toggleMutation.mutate({ id, updates: { isStarred: !cur } });
-                    }}
-                  />
-                ))}
-              </AnimatePresence>
-            ) : (
-              <div className="py-32 flex flex-col items-center text-center gap-8 bg-surface-1/40 rounded-[48px] border-2 border-dashed border-surface-variant/5 mx-auto max-w-lg animate-fade-in-up">
-                <div className="relative">
-                  <div className="h-24 w-24 bg-primary-container/10 rounded-full flex items-center justify-center">
-                    <InboxIcon className="h-12 w-12 text-primary/20" />
+      {isMobile ? (
+        emailListContent
+      ) : (
+        <ResizablePanelGroup direction="horizontal" className="h-full">
+          <ResizablePanel defaultSize={35} minSize={25} maxSize={50}>
+            {emailListContent}
+          </ResizablePanel>
+          <ResizableHandle className="w-1 bg-surface-variant/5 hover:bg-primary/20 transition-colors" />
+          <ResizablePanel defaultSize={65}>
+            <div className="h-full bg-surface-1/30">
+              <AnimatePresence mode="wait">
+                {selectedThreadId ? (
+                  <motion.div
+                    key={selectedThreadId}
+                    initial={{ opacity: 0, x: 20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -20 }}
+                    className="h-full"
+                  >
+                    <ThreadPage embeddedId={selectedThreadId} onBack={() => setSelectedThreadId(null)} />
+                  </motion.div>
+                ) : (
+                  <div className="h-full flex flex-col items-center justify-center text-center p-12 space-y-4">
+                    <div className="h-24 w-24 bg-surface-2 rounded-full flex items-center justify-center">
+                      <Sparkles className="h-10 w-10 text-primary/20" />
+                    </div>
+                    <h3 className="text-2xl font-black tracking-tight">Select a conversation</h3>
+                    <p className="text-muted-foreground text-sm max-w-xs">Pick an email from the list to view its contents and reply.</p>
                   </div>
-                  <Sparkles className="absolute -top-1 -right-1 h-6 w-6 text-primary animate-pulse" />
-                </div>
-                <div className="space-y-2 px-8">
-                  <h3 className="text-2xl font-black">All caught up</h3>
-                  <p className="text-surface-on-variant/60 text-sm">No conversations found in {folder}.</p>
-                  {searchQuery && (
-                    <Button variant="link" onClick={() => setSearchQuery('')} className="text-primary font-bold">
-                      Clear search filter
-                    </Button>
-                  )}
-                </div>
-              </div>
-            )}
-          </section>
-        </div>
-      </div>
+                )}
+              </AnimatePresence>
+            </div>
+          </ResizablePanel>
+        </ResizablePanelGroup>
+      )}
       <Link to="/compose">
         <motion.button
           whileHover={{ scale: 1.05 }}
           whileTap={{ scale: 0.95 }}
           className="m3-fab shadow-xl shadow-primary/30"
-          aria-label="Compose"
+          layoutId="compose-fab"
         >
           <Plus className="h-10 w-10" />
         </motion.button>
